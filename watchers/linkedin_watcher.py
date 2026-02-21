@@ -91,34 +91,23 @@ _MAX_ITEMS = 25
 _CHECK_INTERVAL = 300
 
 # ---------------------------------------------------------------------------
-# Selectors — LinkedIn ~early 2026
-# Inspect element and update if LinkedIn redesigns these sections.
+# Selectors — confirmed against LinkedIn 2026-02-21 via debug_linkedin.py
 # ---------------------------------------------------------------------------
 
 # Messaging page
 _MSG_PAGE       = "https://www.linkedin.com/messaging/"
-_MSG_CONVO_ROW  = "li.msg-conversation-listitem"
-_MSG_UNREAD_IND = (
-    "span.msg-conversation-card__unread-count, "
-    "div[aria-label*='unread message']"
-)
-_MSG_SENDER     = "h3.msg-conversation-listitem__participant-names span.truncate"
-_MSG_PREVIEW    = "p.msg-conversation-listitem__message-snippet"
-_MSG_LINK       = "a[href*='/messaging/thread/']"
+_MSG_CONVO_ROW  = "li.msg-conversation-listitem"          # ✓ confirmed (19 found)
+_MSG_SENDER     = "h3.msg-conversation-listitem__participant-names span.truncate"  # ✓
+_MSG_PREVIEW    = "p.msg-conversation-card__message-snippet"                       # ✓
 
-# Network / invitations page
-_CONN_PAGE      = "https://www.linkedin.com/mynetwork/invitation-manager/"
-_CONN_LIST      = "ul.invitation-list, ul[aria-label*='Invitations']"
-_CONN_CARD      = "li.invitation-card, li[data-control-id]"
-_CONN_NAME      = (
-    "span.invitation-card__title, "
-    "span[aria-label*='Invitation'] strong"
-)
+# Network / invitations page — LinkedIn SPA needs extra render time
+_CONN_PAGE      = "https://www.linkedin.com/mynetwork/invitation-manager/received/"
+# Wait for any of these to confirm page render
+_CONN_READY     = "div[class*='invitation'], li[class*='invitation'], div.mn-invitation-list"
+_CONN_CARD      = "li[class*='invitation-'], div[class*='invitation-card']"
+_CONN_NAME      = "span[class*='invitation'] span, div[class*='invitation'] span.t-bold, span.t-16.t-black"
 _CONN_LINK      = "a[href*='/in/']"
-_CONN_MSG       = (
-    "p.invitation-card__custom-message, "
-    "span[class*='custom-message']"
-)
+_CONN_MSG       = "p[class*='message'], span[class*='message'], div[class*='custom-message']"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -186,20 +175,21 @@ class LinkedInWatcher(BaseWatcher):
             return results
 
         rows = page.query_selector_all(_MSG_CONVO_ROW)
-        self.logger.debug(f"LinkedIn messages: {len(rows)} conversation rows found.")
+        self.logger.info(f"LinkedIn messages: {len(rows)} conversation rows found.")
 
         for row in rows[:_MAX_ITEMS]:
-            # Skip read conversations
-            if not row.query_selector(_MSG_UNREAD_IND):
-                continue
-
             sender_el  = row.query_selector(_MSG_SENDER)
             preview_el = row.query_selector(_MSG_PREVIEW)
-            link_el    = row.query_selector(_MSG_LINK)
 
             sender  = sender_el.inner_text().strip()  if sender_el  else "Unknown"
             preview = preview_el.inner_text().strip() if preview_el else ""
-            profile = _abs_url(link_el.get_attribute("href") if link_el else "")
+
+            # Strip sender prefix LinkedIn sometimes adds (e.g. "Muhammad: Hi there")
+            if ": " in preview and preview.split(": ")[0].strip() in sender:
+                preview = preview.split(": ", 1)[1]
+
+            if not _has_lead_keyword(preview):
+                continue
 
             uid = _item_id("dm", sender, preview)
             if self._is_processed(uid):
@@ -207,12 +197,12 @@ class LinkedInWatcher(BaseWatcher):
 
             results.append(
                 {
-                    "id":       uid,
-                    "kind":     "dm",
-                    "name":     sender,
-                    "profile":  profile,
-                    "message":  preview,
-                    "is_lead":  _has_lead_keyword(preview),
+                    "id":      uid,
+                    "kind":    "dm",
+                    "name":    sender,
+                    "profile": "",   # not available on messaging list page
+                    "message": preview,
+                    "is_lead": True,
                 }
             )
 
@@ -221,14 +211,16 @@ class LinkedInWatcher(BaseWatcher):
     def _scrape_connections(self, page) -> list[dict]:
         results: list[dict] = []
         try:
-            page.goto(_CONN_PAGE, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_selector(_CONN_LIST, timeout=15_000)
+            page.goto(_CONN_PAGE, wait_until="networkidle", timeout=30_000)
+            # LinkedIn's SPA needs extra time to render invitation cards
+            page.wait_for_timeout(5_000)
+            page.wait_for_selector(_CONN_READY, timeout=10_000)
         except PwTimeout:
-            self.logger.warning("LinkedIn invitations page did not load in time.")
+            self.logger.info("LinkedIn invitations page: no invitation cards found (may be empty).")
             return results
 
         cards = page.query_selector_all(_CONN_CARD)
-        self.logger.debug(f"LinkedIn connections: {len(cards)} invitation cards found.")
+        self.logger.info(f"LinkedIn connections: {len(cards)} invitation cards found.")
 
         for card in cards[:_MAX_ITEMS]:
             name_el = card.query_selector(_CONN_NAME)
