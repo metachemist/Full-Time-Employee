@@ -16,6 +16,7 @@ The watcher runs until interrupted (Ctrl+C). Keep it alive with PM2:
 import sys
 import time
 import argparse
+
 from datetime import datetime
 from pathlib import Path
 

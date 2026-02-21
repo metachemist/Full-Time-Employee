@@ -1,0 +1,23 @@
+# Environment secrets — NEVER commit
+.env
+
+# Watcher persistent state (processed IDs, OAuth tokens)
+watchers/.state/
+
+# Playwright browser session data
+.whatsapp_session/
+.linkedin_session/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Logs
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
