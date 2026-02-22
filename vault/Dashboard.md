@@ -1,5 +1,5 @@
 ---
-updated: 2026-02-22T15:11:04.730513+00:00
+updated: 2026-02-22T16:47:16.866716+00:00
 ---
 
 # AI Employee — Dashboard
@@ -9,16 +9,15 @@ updated: 2026-02-22T15:11:04.730513+00:00
 | Folder             | Files |
 |--------------------|-------|
 | 📥 Needs Action    | 0     |
-| 📋 Plans           | 2     |
-| ⏳ Pending Approval | 2     |
+| 📋 Plans           | 6     |
+| ⏳ Pending Approval | 6     |
 | ✅ Approved        | 0     |
 | ❌ Rejected        | 0     |
-| 🗂 Done            | 10     |
+| 🗂 Done            | 6     |
 
 ## Recent Activity
 
-- `2026-02-22 15:11 UTC` [GMAIL] Sarah Chen → `PLAN_GMAIL_Sarah_Chen_EMAIL_test_pricing_i_2026-02-22.md` + `APPROVAL_SEND_EMAIL_Sarah_Chen_EMAIL_test_prici_2026-02-22.md`
-- `2026-02-22 15:11 UTC` [LINKEDIN] James Nakamura → `PLAN_LINKEDIN_James_Nakamura_LINKEDIN_CONN_James_2026-02-22.md` + `APPROVAL_SEND_LINKEDIN_CONNECTION_REP_James_Nakamura_LINKEDIN_CONN_Ja_2026-02-22.md`
+_No recent activity this session._
 
 ---
-*Updated by Planning Engine — 2026-02-22 15:11 UTC*
+*Updated by Planning Engine — 2026-02-22 16:47 UTC*
