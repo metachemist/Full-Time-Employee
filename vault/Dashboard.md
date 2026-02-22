@@ -1,18 +1,24 @@
 ---
-last_updated: 2026-02-20T00:00:00
+updated: 2026-02-22T15:11:04.730513+00:00
 ---
 
-# AI Employee Dashboard
+# AI Employee — Dashboard
 
-## Status
-- Watcher: ⬜ Not started (run `python watchers/filesystem_watcher.py vault` to start)
-- Active Tasks: 0
-- Completed Today: 1
+## Live Vault Counts
 
-## Pending Action
-None
+| Folder             | Files |
+|--------------------|-------|
+| 📥 Needs Action    | 0     |
+| 📋 Plans           | 2     |
+| ⏳ Pending Approval | 2     |
+| ✅ Approved        | 0     |
+| ❌ Rejected        | 0     |
+| 🗂 Done            | 10     |
 
 ## Recent Activity
-- [2026-02-20 00:00] Processed `Testing_2.0.md` — greeting/test file found in Inbox (watcher offline), no action required → /Done
-- [2026-02-18 00:00] Processed `for_testing_purpose.md` — test file, no action required → /Done
-- [2026-02-18 00:00] Processed `testing_purpose_partone.md` — greeting, no action required → /Done
+
+- `2026-02-22 15:11 UTC` [GMAIL] Sarah Chen → `PLAN_GMAIL_Sarah_Chen_EMAIL_test_pricing_i_2026-02-22.md` + `APPROVAL_SEND_EMAIL_Sarah_Chen_EMAIL_test_prici_2026-02-22.md`
+- `2026-02-22 15:11 UTC` [LINKEDIN] James Nakamura → `PLAN_LINKEDIN_James_Nakamura_LINKEDIN_CONN_James_2026-02-22.md` + `APPROVAL_SEND_LINKEDIN_CONNECTION_REP_James_Nakamura_LINKEDIN_CONN_Ja_2026-02-22.md`
+
+---
+*Updated by Planning Engine — 2026-02-22 15:11 UTC*

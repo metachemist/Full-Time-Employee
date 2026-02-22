@@ -1,0 +1,14 @@
+{
+  "processed": {
+    "EMAIL_test_pricing_inquiry.md": {
+      "timestamp": "2026-02-22T15:11:04.725047+00:00",
+      "plan": "Plans/PLAN_GMAIL_Sarah_Chen_EMAIL_test_pricing_i_2026-02-22.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_EMAIL_Sarah_Chen_EMAIL_test_prici_2026-02-22.md"
+    },
+    "LINKEDIN_CONN_James_Nakamura_20260222_091800.md": {
+      "timestamp": "2026-02-22T15:11:04.727979+00:00",
+      "plan": "Plans/PLAN_LINKEDIN_James_Nakamura_LINKEDIN_CONN_James_2026-02-22.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_LINKEDIN_CONNECTION_REP_James_Nakamura_LINKEDIN_CONN_Ja_2026-02-22.md"
+    }
+  }
+}
