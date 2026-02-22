@@ -11,10 +11,14 @@
             "id": "b38d55245d4f3782",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "Done/Testing_2.0.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "Testing_2.0"
             }
           }
         ]
@@ -178,6 +182,11 @@
   },
   "active": "b38d55245d4f3782",
   "lastOpenFiles": [
+    "Logs/2026-02-20.json",
+    "Plans/PLAN_review_testing_2_2026-02-20.md",
+    "Done/PLAN_review_testing_2_2026-02-20.md",
+    "Done/Testing_2.0.md",
+    "Inbox/Testing_2.0.md",
     "Plans/PLAN_review_partone_2026-02-18.md",
     "Done/PLAN_review_partone_2026-02-18.md",
     "Done/FILE_testing_purpose_partone_2026-02-18_000001.md",
