@@ -1,18 +1,23 @@
 ---
-last_updated: 2026-02-20T00:00:00
+updated: 2026-02-22T16:47:16.866716+00:00
 ---
 
-# AI Employee Dashboard
+# AI Employee — Dashboard
 
-## Status
-- Watcher: ⬜ Not started (run `python watchers/filesystem_watcher.py vault` to start)
-- Active Tasks: 0
-- Completed Today: 1
+## Live Vault Counts
 
-## Pending Action
-None
+| Folder             | Files |
+|--------------------|-------|
+| 📥 Needs Action    | 0     |
+| 📋 Plans           | 6     |
+| ⏳ Pending Approval | 6     |
+| ✅ Approved        | 0     |
+| ❌ Rejected        | 0     |
+| 🗂 Done            | 6     |
 
 ## Recent Activity
-- [2026-02-20 00:00] Processed `Testing_2.0.md` — greeting/test file found in Inbox (watcher offline), no action required → /Done
-- [2026-02-18 00:00] Processed `for_testing_purpose.md` — test file, no action required → /Done
-- [2026-02-18 00:00] Processed `testing_purpose_partone.md` — greeting, no action required → /Done
+
+_No recent activity this session._
+
+---
+*Updated by Planning Engine — 2026-02-22 16:47 UTC*

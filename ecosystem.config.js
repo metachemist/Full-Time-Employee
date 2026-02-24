@@ -104,5 +104,25 @@ module.exports = {
       error_file:  path.resolve(__dirname, "logs", "pm2-linkedin-error.log"),
       merge_logs:  true,
     },
+
+    // ── Planning Engine (Phase 2) ──────────────────────────────────────────
+    {
+      name:        "planning-engine",
+      script:      path.resolve(__dirname, "orchestrator", "planning_engine.py"),
+      interpreter: "python3",
+      args:        ["--vault", VAULT_PATH, "--loop", "--interval", "30"],
+      cwd:         path.resolve(__dirname),
+      watch:       false,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      env: {
+        PYTHONUNBUFFERED: "1",
+        PYTHONPATH:       path.resolve(__dirname),
+      },
+      log_file:    path.resolve(__dirname, "logs", "pm2-planning.log"),
+      error_file:  path.resolve(__dirname, "logs", "pm2-planning-error.log"),
+      merge_logs:  true,
+    },
   ],
 };
