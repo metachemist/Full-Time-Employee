@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""
+Approval Executor — AI Employee Silver Tier skill script.
+
+Scans vault/Approved/ for pending APPROVAL_*.md files, parses each one,
+dispatches to the appropriate sender script, then moves to vault/Done/
+and writes the audit log.
+
+Usage:
+    python execute.py --vault ./vault             # execute all approvals
+    python execute.py --vault ./vault --dry-run   # preview without executing
+    python execute.py --vault ./vault --once-file APPROVAL_SEND_EMAIL_...md
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+import textwrap
+from datetime import datetime, timezone
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    sys.exit("Missing dependency: pyyaml\nRun: pip install pyyaml")
+
+_SCRIPT_DIR  = Path(__file__).resolve().parent
+_PROJECT_DIR = _SCRIPT_DIR.parent.parent.parent.parent  # project root
+
+
+def _ts() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+# ---------------------------------------------------------------------------
+# Frontmatter + body parser
+# ---------------------------------------------------------------------------
+
+_FM_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)", re.DOTALL)
+
+
+def _parse_approval(text: str) -> tuple[dict, str]:
+    m = _FM_RE.match(text)
+    if m:
+        try:
+            fm = yaml.safe_load(m.group(1)) or {}
+        except yaml.YAMLError:
+            fm = {}
+        return fm, m.group(2).strip()
+    return {}, text.strip()
+
+
+def _extract_field(body: str, label: str) -> str:
+    """Extract value from '- **Label:** value' lines in body."""
+    m = re.search(rf"\*\*{re.escape(label)}\*\*[:\s]+(.+)", body)
+    return m.group(1).strip() if m else ""
+
+
+def _extract_message(body: str) -> str:
+    """Extract content under '## Message / Content' section, stripping 2-space indent."""
+    m = re.search(r"##\s+Message[^#\n]*\n+(.*?)(?:\n##|$)", body, re.DOTALL)
+    if not m:
+        return ""
+    raw = m.group(1)
+    # Strip consistent leading whitespace (approval builder adds 2 spaces)
+    return textwrap.dedent(raw).strip()
+
+
+# ---------------------------------------------------------------------------
+# Skill script paths
+# ---------------------------------------------------------------------------
+
+_SKILLS_DIR = _PROJECT_DIR / ".claude" / "skills"
+
+_ACTION_SCRIPTS: dict[str, Path] = {
+    "send_email":                    _SKILLS_DIR / "gmail-sender"    / "scripts" / "send_email.py",
+    "send_whatsapp":                 _SKILLS_DIR / "whatsapp-sender" / "scripts" / "send_message.py",
+    "send_linkedin_dm":              _SKILLS_DIR / "whatsapp-sender" / "scripts" / "send_message.py",
+    "send_linkedin_connection_reply":_SKILLS_DIR / "whatsapp-sender" / "scripts" / "send_message.py",
+    "send_linkedin_post":            _SKILLS_DIR / "linkedin-poster" / "scripts" / "create_post.py",
+    "send_message":                  _SKILLS_DIR / "whatsapp-sender" / "scripts" / "send_message.py",
+}
+
+
+# ---------------------------------------------------------------------------
+# Per-action argument builders
+# ---------------------------------------------------------------------------
+
+def _build_args(action: str, body: str) -> list[str] | None:
+    target  = _extract_field(body, "Target")
+    subject = _extract_field(body, "Subject / Title") or _extract_field(body, "Subject")
+    message = _extract_message(body)
+
+    if action == "send_email":
+        if not target or not message:
+            return None
+        args = ["--to", target, "--subject", subject or "(no subject)", "--body", message]
+        return args
+
+    if action in ("send_whatsapp", "send_linkedin_dm", "send_linkedin_connection_reply", "send_message"):
+        if not target or not message:
+            return None
+        # For LinkedIn DMs/connection replies the "target" is a display name
+        name = target.split("<")[0].strip()  # strip email angle-bracket if present
+        return ["--to", name, "--message", message]
+
+    if action == "send_linkedin_post":
+        if not message:
+            return None
+        return ["--content", message]
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+
+def _audit(vault: Path, event: str, **kwargs) -> None:
+    entry = {"timestamp": _ts(), "event": event, **kwargs}
+    log_file = vault / "Logs" / f"{_today()}.jsonl"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with log_file.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, default=str) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Single-file executor
+# ---------------------------------------------------------------------------
+
+def execute_approval(
+    approval_file: Path,
+    vault: Path,
+    dry_run: bool = False,
+) -> dict:
+    text = approval_file.read_text(encoding="utf-8")
+    fm, body = _parse_approval(text)
+
+    action = str(fm.get("action", "")).lower()
+    status = str(fm.get("status", "")).lower()
+
+    if status in ("sent", "posted", "failed"):
+        return {"status": "skipped", "reason": f"Already processed: status={status}", "file": approval_file.name}
+
+    if not action:
+        return {"status": "error", "reason": "No 'action' field in frontmatter.", "file": approval_file.name}
+
+    script = _ACTION_SCRIPTS.get(action)
+    if not script:
+        return {"status": "error", "reason": f"Unknown action type: '{action}'", "file": approval_file.name}
+
+    if not script.exists():
+        return {"status": "error", "reason": f"Skill script not found: {script}", "file": approval_file.name}
+
+    extra_args = _build_args(action, body)
+    if extra_args is None:
+        return {"status": "error", "reason": "Could not extract required fields (target/message) from approval file.", "file": approval_file.name}
+
+    cmd = [sys.executable, str(script)] + extra_args
+    if dry_run:
+        cmd.append("--dry-run")
+
+    print(f"[{action.upper():<36}] {approval_file.name}")
+    if dry_run:
+        print(f"  DRY-RUN cmd: {' '.join(cmd[:6])}...")
+        _audit(vault, "dry_run", action=action, file=approval_file.name)
+        return {"status": "dry_run", "action": action, "file": approval_file.name}
+
+    # ── Execute ──────────────────────────────────────────────────────────
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        output_raw = result.stdout.strip()
+        try:
+            output = json.loads(output_raw)
+        except json.JSONDecodeError:
+            output = {"raw": output_raw}
+
+        success = result.returncode == 0 and output.get("status") not in ("error", "failed")
+        new_status = output.get("status", "sent" if success else "failed")
+
+        # ── Update approval file ──────────────────────────────────────────
+        updated_text = re.sub(r"^status:\s*.+$", f"status: {new_status}", text, flags=re.MULTILINE)
+        updated_text += f"\n<!-- executed_at: {_ts()} -->\n"
+        approval_file.write_text(updated_text, encoding="utf-8")
+
+        # ── Move to Done ──────────────────────────────────────────────────
+        done_dest = vault / "Done" / approval_file.name
+        if done_dest.exists():
+            done_dest = done_dest.with_name(f"{done_dest.stem}_{int(datetime.now().timestamp())}.md")
+        approval_file.rename(done_dest)
+
+        # ── Audit ─────────────────────────────────────────────────────────
+        _audit(vault, "action_executed", action=action, file=approval_file.name,
+               result="success" if success else "error",
+               output=output, returncode=result.returncode)
+
+        status_icon = "✓" if success else "✗"
+        print(f"  {status_icon} {new_status.upper()}")
+        if not success and result.stderr:
+            print(f"  stderr: {result.stderr[:200]}")
+
+        return {
+            "status": "success" if success else "error",
+            "action": action,
+            "file":   approval_file.name,
+            "result": output,
+        }
+
+    except subprocess.TimeoutExpired:
+        _audit(vault, "action_timeout", action=action, file=approval_file.name)
+        return {"status": "error", "reason": "Script timed out after 120 s.", "file": approval_file.name}
+    except Exception as exc:
+        _audit(vault, "action_error", action=action, file=approval_file.name, error=str(exc))
+        return {"status": "error", "reason": str(exc), "file": approval_file.name}
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Approval Executor — dispatch all approved vault actions."
+    )
+    parser.add_argument("--vault", default="./vault",
+                        help="Path to Obsidian vault (default: ./vault)")
+    parser.add_argument("--dry-run",   action="store_true",
+                        help="Preview without executing any actions")
+    parser.add_argument("--once-file", metavar="FILENAME",
+                        help="Execute only this specific approval file")
+    args = parser.parse_args()
+
+    vault = Path(args.vault).expanduser().resolve()
+    approved_dir = vault / "Approved"
+    approved_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.once_file:
+        files = [approved_dir / args.once_file]
+        if not files[0].exists():
+            print(f"ERROR: File not found: {files[0]}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        files = sorted(approved_dir.glob("APPROVAL_*.md"), key=lambda p: p.stat().st_mtime)
+
+    if not files:
+        print("No pending approvals found in vault/Approved/")
+        sys.exit(0)
+
+    print(f"Found {len(files)} approval(s) to process{' [DRY RUN]' if args.dry_run else ''}.\n")
+
+    results = []
+    for f in files:
+        r = execute_approval(f, vault, dry_run=args.dry_run)
+        results.append(r)
+
+    success = sum(1 for r in results if r["status"] in ("success", "dry_run"))
+    errors  = sum(1 for r in results if r["status"] == "error")
+    skipped = sum(1 for r in results if r["status"] == "skipped")
+
+    print(f"\n── Summary ──────────────────────────────────")
+    print(f"  Processed: {success}  |  Errors: {errors}  |  Skipped: {skipped}")
+
+    sys.exit(0 if errors == 0 else 1)
+
+
+if __name__ == "__main__":
+    main()
