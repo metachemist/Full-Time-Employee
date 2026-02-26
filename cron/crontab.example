@@ -1,0 +1,50 @@
+# AI Employee — Silver Tier Cron Schedule
+# ─────────────────────────────────────────────────────────────────────────────
+# Setup:
+#   1. Edit this file and replace /path/to/full_time_employee with the real path
+#   2. Install: crontab cron/crontab.example
+#   3. Verify:  crontab -l
+#
+# NOTE: PM2 is preferred for long-running daemons (watchers, planning engine,
+# approval executor). Use cron only for tasks that benefit from fixed schedules.
+# Run: pm2 start ecosystem.config.js && pm2 save && pm2 startup
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Variables ────────────────────────────────────────────────────────────────
+# IMPORTANT: Set these before running crontab -e
+# PROJ=/home/your_user/Code/full_time_employee
+# PYTHON=/home/your_user/Code/full_time_employee/.venv/bin/python3
+# VAULT=/home/your_user/Code/full_time_employee/vault
+# LOG=/home/your_user/Code/full_time_employee/logs
+
+# ── On system reboot ─────────────────────────────────────────────────────────
+
+# Start PM2 watchers + planning engine + approval executor on reboot
+@reboot cd /path/to/full_time_employee && pm2 start ecosystem.config.js >> logs/pm2-startup.log 2>&1
+
+# ── Periodic tasks ───────────────────────────────────────────────────────────
+
+# [OPTIONAL] Run planning engine once every 5 minutes (if NOT using PM2 loop)
+# */5 * * * * cd /path/to/full_time_employee && PYTHONPATH=. .venv/bin/python -m orchestrator.planning_engine --vault ./vault --once >> logs/planning-cron.log 2>&1
+
+# [OPTIONAL] Run approval executor every 2 minutes (if NOT using PM2 loop)
+# */2 * * * * cd /path/to/full_time_employee && python .claude/skills/approval-executor/scripts/execute.py --vault ./vault >> logs/executor-cron.log 2>&1
+
+# ── Scheduled intelligence tasks ─────────────────────────────────────────────
+
+# Daily: Drop a briefing trigger into vault/Inbox at 8:00 AM (Mon-Fri)
+# This causes the filesystem watcher to create a Needs_Action item for Claude
+# to generate a morning briefing from vault state.
+0 8 * * 1-5 echo "Generate morning briefing from vault state. Summarise Pending_Approval count, Plans in progress, and recent Done items." > /path/to/full_time_employee/vault/Inbox/BRIEFING_$(date +\%Y-\%m-\%d).md
+
+# Weekly: Sunday at 9:00 PM — trigger business review
+0 21 * * 0 echo "Generate weekly business review. Check Plans completed this week, items still in Pending_Approval, and suggest LinkedIn posts for the coming week." > /path/to/full_time_employee/vault/Inbox/WEEKLY_REVIEW_$(date +\%Y-\%m-\%d).md
+
+# Monthly: First day of month at 7:00 AM — subscription/cost audit trigger
+0 7 1 * * echo "Monthly audit: review vault/Logs/ for the past 30 days. Count total emails sent, WhatsApp messages sent, LinkedIn posts published. Note any failures or approvals that expired without action." > /path/to/full_time_employee/vault/Inbox/MONTHLY_AUDIT_$(date +\%Y-\%m-\%d).md
+
+# ── Log rotation ─────────────────────────────────────────────────────────────
+
+# Trim logs older than 90 days (keep audit trail compliance)
+0 2 * * * find /path/to/full_time_employee/logs -name "*.log" -mtime +90 -delete
+0 2 * * * find /path/to/full_time_employee/vault/Logs -name "*.jsonl" -mtime +90 -delete

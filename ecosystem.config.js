@@ -105,6 +105,26 @@ module.exports = {
       merge_logs:  true,
     },
 
+    // ── Approval Executor (Phase 2 — HITL dispatcher) ─────────────────────
+    {
+      name:        "approval-executor",
+      script:      path.resolve(__dirname, ".claude", "skills", "approval-executor", "scripts", "execute.py"),
+      interpreter: "python3",
+      args:        ["--vault", VAULT_PATH, "--loop", "--interval", "30"],
+      cwd:         path.resolve(__dirname),
+      watch:       false,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      env: {
+        PYTHONUNBUFFERED: "1",
+        PYTHONPATH:       path.resolve(__dirname),
+      },
+      log_file:    path.resolve(__dirname, "logs", "pm2-executor.log"),
+      error_file:  path.resolve(__dirname, "logs", "pm2-executor-error.log"),
+      merge_logs:  true,
+    },
+
     // ── Planning Engine (Phase 2) ──────────────────────────────────────────
     {
       name:        "planning-engine",

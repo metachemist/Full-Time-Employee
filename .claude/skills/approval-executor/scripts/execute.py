@@ -10,6 +10,8 @@ Usage:
     python execute.py --vault ./vault             # execute all approvals
     python execute.py --vault ./vault --dry-run   # preview without executing
     python execute.py --vault ./vault --once-file APPROVAL_SEND_EMAIL_...md
+    python execute.py --vault ./vault --loop      # daemon mode (PM2 / cron alternative)
+    python execute.py --vault ./vault --loop --interval 60
 """
 
 import argparse
@@ -224,6 +226,35 @@ def execute_approval(
 # Main
 # ---------------------------------------------------------------------------
 
+def _run_once(vault: Path, approved_dir: Path, dry_run: bool, once_file: str | None) -> int:
+    """Process one batch of approvals. Returns exit code (0=ok, 1=errors)."""
+    if once_file:
+        files = [approved_dir / once_file]
+        if not files[0].exists():
+            print(f"ERROR: File not found: {files[0]}", file=sys.stderr)
+            return 1
+    else:
+        files = sorted(approved_dir.glob("APPROVAL_*.md"), key=lambda p: p.stat().st_mtime)
+
+    if not files:
+        return 0
+
+    print(f"Found {len(files)} approval(s) to process{' [DRY RUN]' if dry_run else ''}.\n")
+
+    results = []
+    for f in files:
+        r = execute_approval(f, vault, dry_run=dry_run)
+        results.append(r)
+
+    success = sum(1 for r in results if r["status"] in ("success", "dry_run"))
+    errors  = sum(1 for r in results if r["status"] == "error")
+    skipped = sum(1 for r in results if r["status"] == "skipped")
+
+    print(f"\n── Summary ──────────────────────────────────")
+    print(f"  Processed: {success}  |  Errors: {errors}  |  Skipped: {skipped}")
+    return 0 if errors == 0 else 1
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Approval Executor — dispatch all approved vault actions."
@@ -234,39 +265,46 @@ def main() -> None:
                         help="Preview without executing any actions")
     parser.add_argument("--once-file", metavar="FILENAME",
                         help="Execute only this specific approval file")
+
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--loop", action="store_true",
+                      help="Run continuously, polling every --interval seconds (PM2 mode)")
+    parser.add_argument("--interval", type=int, default=30,
+                        metavar="SECS",
+                        help="Poll interval in seconds for --loop mode (default: 30)")
     args = parser.parse_args()
 
-    vault = Path(args.vault).expanduser().resolve()
+    vault        = Path(args.vault).expanduser().resolve()
     approved_dir = vault / "Approved"
     approved_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.once_file:
-        files = [approved_dir / args.once_file]
-        if not files[0].exists():
-            print(f"ERROR: File not found: {files[0]}", file=sys.stderr)
-            sys.exit(1)
+    if args.loop:
+        import logging
+        logging.basicConfig(
+            format="%(asctime)s - ApprovalExecutor - %(levelname)s - %(message)s",
+            level=logging.INFO,
+        )
+        log = logging.getLogger("ApprovalExecutor")
+        log.info(f"Loop mode started (interval={args.interval}s). Ctrl+C to stop.")
+        while True:
+            try:
+                files = list(approved_dir.glob("APPROVAL_*.md"))
+                if files:
+                    log.info(f"{len(files)} approval(s) pending — processing...")
+                    _run_once(vault, approved_dir, args.dry_run, None)
+                else:
+                    log.debug("No approvals pending.")
+            except KeyboardInterrupt:
+                log.info("Shutdown requested — exiting cleanly.")
+                break
+            except Exception as exc:
+                log.error(f"Unhandled error: {exc}", exc_info=True)
+            time.sleep(args.interval)
     else:
-        files = sorted(approved_dir.glob("APPROVAL_*.md"), key=lambda p: p.stat().st_mtime)
-
-    if not files:
-        print("No pending approvals found in vault/Approved/")
-        sys.exit(0)
-
-    print(f"Found {len(files)} approval(s) to process{' [DRY RUN]' if args.dry_run else ''}.\n")
-
-    results = []
-    for f in files:
-        r = execute_approval(f, vault, dry_run=args.dry_run)
-        results.append(r)
-
-    success = sum(1 for r in results if r["status"] in ("success", "dry_run"))
-    errors  = sum(1 for r in results if r["status"] == "error")
-    skipped = sum(1 for r in results if r["status"] == "skipped")
-
-    print(f"\n── Summary ──────────────────────────────────")
-    print(f"  Processed: {success}  |  Errors: {errors}  |  Skipped: {skipped}")
-
-    sys.exit(0 if errors == 0 else 1)
+        if not list(approved_dir.glob("APPROVAL_*.md")) and not args.once_file:
+            print("No pending approvals found in vault/Approved/")
+            sys.exit(0)
+        sys.exit(_run_once(vault, approved_dir, args.dry_run, args.once_file))
 
 
 if __name__ == "__main__":
