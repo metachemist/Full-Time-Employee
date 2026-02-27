@@ -83,11 +83,7 @@ _SKILLS_DIR = _PROJECT_DIR / ".claude" / "skills"
 
 _ACTION_SCRIPTS: dict[str, Path] = {
     "send_email":                    _SKILLS_DIR / "gmail-sender"    / "scripts" / "send_email.py",
-    "send_whatsapp":                 _SKILLS_DIR / "whatsapp-sender" / "scripts" / "send_message.py",
-    "send_linkedin_dm":              _SKILLS_DIR / "whatsapp-sender" / "scripts" / "send_message.py",
-    "send_linkedin_connection_reply":_SKILLS_DIR / "whatsapp-sender" / "scripts" / "send_message.py",
     "send_linkedin_post":            _SKILLS_DIR / "linkedin-poster" / "scripts" / "create_post.py",
-    "send_message":                  _SKILLS_DIR / "whatsapp-sender" / "scripts" / "send_message.py",
 }
 
 
@@ -105,13 +101,6 @@ def _build_args(action: str, body: str) -> list[str] | None:
             return None
         args = ["--to", target, "--subject", subject or "(no subject)", "--body", message]
         return args
-
-    if action in ("send_whatsapp", "send_linkedin_dm", "send_linkedin_connection_reply", "send_message"):
-        if not target or not message:
-            return None
-        # For LinkedIn DMs/connection replies the "target" is a display name
-        name = target.split("<")[0].strip()  # strip email angle-bracket if present
-        return ["--to", name, "--message", message]
 
     if action == "send_linkedin_post":
         if not message:

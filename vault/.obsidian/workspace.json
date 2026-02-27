@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Done/Testing_2.0.md",
+                "file": "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19c856235b7760_2026-02-22.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Testing_2.0"
+              "title": "PLAN_FILE_DROP_Unknown_EMAIL_19c856235b7760_2026-02-22"
             }
           }
         ]
@@ -182,6 +182,8 @@
   },
   "active": "b38d55245d4f3782",
   "lastOpenFiles": [
+    "Untitled.canvas",
+    "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19c856235b7760_2026-02-22.md",
     "Logs/2026-02-20.json",
     "Plans/PLAN_review_testing_2_2026-02-20.md",
     "Done/PLAN_review_testing_2_2026-02-20.md",

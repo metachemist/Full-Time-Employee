@@ -2,11 +2,10 @@
 name: approval-executor
 description: |
   Process approved actions from vault/Approved/ and execute them. Reads each
-  APPROVAL_*.md file, identifies the action type (send_email, send_whatsapp,
-  send_linkedin_dm, send_linkedin_post), dispatches to the correct sender skill,
-  logs the result, and moves files to vault/Done/. Use when the user has moved
-  approval files to /Approved and wants them executed, or when running as part
-  of the autonomous action loop.
+  APPROVAL_*.md file, identifies the action type (send_email, send_linkedin_post),
+  dispatches to the correct sender skill, logs the result, and moves files to
+  vault/Done/. Use when the user has moved approval files to /Approved and wants
+  them executed, or when running as part of the autonomous action loop.
 ---
 
 # Approval Executor
@@ -44,11 +43,7 @@ For each file found, read its `action` frontmatter field to determine what to ex
 | `action` value | Skill to use | Script |
 |----------------|-------------|--------|
 | `send_email` | gmail-sender | `.claude/skills/gmail-sender/scripts/send_email.py` |
-| `send_whatsapp` | whatsapp-sender | `.claude/skills/whatsapp-sender/scripts/send_message.py` |
-| `send_linkedin_dm` | whatsapp-sender style via Playwright | `.claude/skills/whatsapp-sender/scripts/send_message.py` |
-| `send_linkedin_connection_reply` | linkedin-poster | Accept + send DM via Playwright |
 | `send_linkedin_post` | linkedin-poster | `.claude/skills/linkedin-poster/scripts/create_post.py` |
-| `send_message` | whatsapp-sender (fallback) | Use target platform from file |
 
 ### 3. Parse the Approval File
 
@@ -86,24 +81,11 @@ python .claude/skills/gmail-sender/scripts/send_email.py \
   --body "Dear Sarah, ..."
 ```
 
-**WhatsApp:**
-```bash
-python .claude/skills/whatsapp-sender/scripts/send_message.py \
-  --to "Hafsa Shahid" \
-  --message "Hi Hafsa! ..."
-```
-
 **LinkedIn Post:**
 ```bash
 python .claude/skills/linkedin-poster/scripts/create_post.py \
   --content "Post text here..."
 ```
-
-**LinkedIn DM / connection reply:**
-Use the `browsing-with-playwright` skill to:
-1. Navigate to `https://www.linkedin.com/messaging/`
-2. Find the conversation with the target name
-3. Type and send the message
 
 ### 5. Update the Vault After Each Action
 
@@ -147,8 +129,7 @@ python .claude/skills/approval-executor/scripts/execute.py \
 
 Output per action:
 ```
-[SEND_EMAIL ] Sarah Chen <sarah@example.com> → sent ✓  (msg_id: 18e4bc...)
-[SEND_WHATSAPP] Hafsa Shahid → sent ✓
+[SEND_EMAIL        ] Sarah Chen <sarah@example.com> → sent ✓  (msg_id: 18e4bc...)
 [SEND_LINKEDIN_POST] Post published ✓  (url: https://linkedin.com/...)
 ```
 

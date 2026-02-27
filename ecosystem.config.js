@@ -63,27 +63,6 @@ module.exports = {
       merge_logs:  true,
     },
 
-    // ── WhatsApp Watcher ───────────────────────────────────────────────────
-    {
-      name:        "watcher-whatsapp",
-      script:      path.join(WATCHERS_DIR, "whatsapp_watcher.py"),
-      interpreter: "python3",
-      args:        VAULT_PATH,
-      cwd:         WATCHERS_DIR,
-      watch:       false,
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 10000,
-      env_file:    path.resolve(__dirname, ".env"),
-      env: {
-        PYTHONUNBUFFERED: "1",
-        WHATSAPP_HEADLESS: "true",
-      },
-      log_file:    path.resolve(__dirname, "logs", "pm2-whatsapp.log"),
-      error_file:  path.resolve(__dirname, "logs", "pm2-whatsapp-error.log"),
-      merge_logs:  true,
-    },
-
     // ── LinkedIn Watcher ───────────────────────────────────────────────────
     {
       name:        "watcher-linkedin",

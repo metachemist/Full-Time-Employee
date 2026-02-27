@@ -11,39 +11,33 @@
       "Bash(python3:*)",
       "Bash(pip install:*)",
       "Bash(pip3 install:*)",
-
       "Bash(PYTHONPATH=. .venv/bin/python -m orchestrator.planning_engine --vault ./vault --once 2>&1)",
       "Bash(PYTHONPATH=. .venv/bin/python -m orchestrator.planning_engine --vault ./vault --loop --interval 30 2>&1)",
-
       "Bash(python .claude/skills/approval-executor/scripts/execute.py --vault ./vault:*)",
       "Bash(python .claude/skills/approval-executor/scripts/execute.py --vault ./vault --dry-run:*)",
       "Bash(python .claude/skills/approval-executor/scripts/execute.py --vault ./vault --loop:*)",
-
       "Bash(python .claude/skills/gmail-sender/scripts/send_email.py:*)",
-      "Bash(python .claude/skills/whatsapp-sender/scripts/send_message.py:*)",
       "Bash(python .claude/skills/linkedin-poster/scripts/create_post.py:*)",
-
       "Bash(bash .claude/skills/browsing-with-playwright/scripts/start-server.sh:*)",
       "Bash(bash .claude/skills/browsing-with-playwright/scripts/stop-server.sh:*)",
       "Bash(python3 .claude/skills/browsing-with-playwright/scripts/verify.py:*)",
-
       "Bash(pm2 start ecosystem.config.js:*)",
       "Bash(pm2 stop:*)",
       "Bash(pm2 restart:*)",
       "Bash(pm2 logs:*)",
       "Bash(pm2 status:*)",
       "Bash(pm2 save:*)",
-
       "Bash(ls vault/:*)",
       "Bash(ls vault/Needs_Action/:*)",
       "Bash(ls vault/Approved/:*)",
       "Bash(ls vault/Pending_Approval/:*)",
       "Bash(ls vault/Plans/:*)",
       "Bash(ls vault/Done/:*)",
-
       "Bash(mv vault/Pending_Approval/* vault/Approved/:*)",
       "Bash(mv vault/Approved/*.md vault/Done/:*)",
-      "Bash(mv vault/Needs_Action/*.md vault/Done/:*)"
+      "Bash(mv vault/Needs_Action/*.md vault/Done/:*)",
+      "Bash(node --version 2>&1 && npm --version 2>&1)",
+      "Bash(./node_modules/.bin/pm2 start ecosystem.config.js 2>&1)"
     ]
   },
   "hooks": {
