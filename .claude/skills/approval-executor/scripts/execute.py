@@ -20,7 +20,6 @@ import re
 import subprocess
 import sys
 import textwrap
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
