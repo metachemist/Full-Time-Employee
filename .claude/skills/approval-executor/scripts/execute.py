@@ -61,7 +61,7 @@ def _parse_approval(text: str) -> tuple[dict, str]:
 
 def _extract_field(body: str, label: str) -> str:
     """Extract value from '- **Label:** value' lines in body."""
-    m = re.search(rf"\*\*{re.escape(label)}\*\*[:\s]+(.+)", body)
+    m = re.search(rf"\*\*{re.escape(label)}:?\*\*[:\s]+(.+)", body)
     return m.group(1).strip() if m else ""
 
 
