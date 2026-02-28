@@ -52,8 +52,11 @@ load_dotenv()
 # Constants
 # ---------------------------------------------------------------------------
 
-# Read-only scope is sufficient for monitoring
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+# Read + send scopes — shared token used by both watcher and gmail-sender skill
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+]
 
 # Stored alongside other watcher state
 _TOKEN_FILE = Path(__file__).parent / ".state" / "gmail_token.json"
@@ -102,7 +105,7 @@ class GmailWatcher(BaseWatcher):
     """
 
     def __init__(self, vault_path: str, credentials_path: str):
-        super().__init__(vault_path, check_interval=120)  # poll every 2 minutes
+        super().__init__(vault_path, check_interval=30)  # poll every 30 seconds
 
         creds_path = Path(credentials_path).expanduser().resolve()
         if not creds_path.exists():

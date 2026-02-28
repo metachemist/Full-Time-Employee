@@ -16,6 +16,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -31,6 +32,12 @@ except ImportError:
 
 _SCRIPT_DIR  = Path(__file__).resolve().parent
 _PROJECT_DIR = _SCRIPT_DIR.parent.parent.parent.parent  # project root
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_PROJECT_DIR / ".env")
+except ImportError:
+    pass  # dotenv optional — env vars may already be set by PM2 env_file
 
 # ---------------------------------------------------------------------------
 # Rate limiting — max actions per hour (in-memory, resets on restart)
@@ -124,7 +131,11 @@ def _build_args(action: str, body: str) -> list[str] | None:
     if action == "send_linkedin_post":
         if not message:
             return None
-        return ["--content", message]
+        args = ["--content", message]
+        session = os.environ.get("LINKEDIN_SESSION_PATH", "")
+        if session:
+            args += ["--session-path", session]
+        return args
 
     return None
 

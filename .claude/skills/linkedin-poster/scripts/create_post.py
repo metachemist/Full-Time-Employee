@@ -161,7 +161,12 @@ def create_post(
                 }
 
             # ── Wait for post to appear in feed ───────────────────────────
-            page.wait_for_load_state("networkidle", timeout=15_000)
+            # LinkedIn feed continuously polls so networkidle rarely fires;
+            # catch the timeout and fall through — post was already submitted.
+            try:
+                page.wait_for_load_state("networkidle", timeout=15_000)
+            except PlaywrightTimeout:
+                pass
             page.wait_for_timeout(2000)
 
             # ── Grab post URL (best effort) ───────────────────────────────
