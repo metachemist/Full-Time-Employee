@@ -39,6 +39,7 @@ def _count_md(folder: Path) -> list[str]:
 def main() -> None:
     needs_action = _count_md(_VAULT / "Needs_Action")
     approved     = _count_md(_VAULT / "Approved")
+    rejected     = _count_md(_VAULT / "Rejected")
 
     # ── Read stdin (Claude Code passes session info as JSON) ──────────────
     try:
@@ -78,6 +79,13 @@ def main() -> None:
             "```bash\n"
             "python .claude/skills/approval-executor/scripts/execute.py --vault ./vault\n"
             "```"
+        )
+
+    if rejected:
+        parts.append(
+            f"\n📋 **{len(rejected)} rejected item(s) in vault/Rejected/** — no action required, "
+            "but consider moving to Done/ to keep the vault clean:\n"
+            + "\n".join(f"  - `{name}`" for name in rejected[:5])
         )
 
     message = "\n".join(parts)

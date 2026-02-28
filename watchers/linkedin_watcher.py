@@ -153,6 +153,7 @@ class LinkedInWatcher(BaseWatcher):
         self._session_path = Path(session_path).expanduser().resolve()
         self._session_path.mkdir(parents=True, exist_ok=True)
         self._headless = headless
+        self._consecutive_zero_msgs = 0   # health-check counter
         self.logger.info(
             f"LinkedIn session dir : {self._session_path} | headless={headless}"
         )
@@ -175,6 +176,16 @@ class LinkedInWatcher(BaseWatcher):
             return results
 
         rows = page.query_selector_all(_MSG_CONVO_ROW)
+        if len(rows) == 0:
+            self._consecutive_zero_msgs += 1
+            if self._consecutive_zero_msgs >= 3:
+                self.logger.warning(
+                    f"No conversations found for {self._consecutive_zero_msgs} consecutive cycles — "
+                    "session may have expired or selectors changed. "
+                    "Re-run with LINKEDIN_HEADLESS=false to re-authenticate."
+                )
+        else:
+            self._consecutive_zero_msgs = 0
         self.logger.info(f"LinkedIn messages: {len(rows)} conversation rows found.")
 
         for row in rows[:_MAX_ITEMS]:

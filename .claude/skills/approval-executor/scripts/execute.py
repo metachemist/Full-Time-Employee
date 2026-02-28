@@ -32,6 +32,25 @@ except ImportError:
 _SCRIPT_DIR  = Path(__file__).resolve().parent
 _PROJECT_DIR = _SCRIPT_DIR.parent.parent.parent.parent  # project root
 
+# ---------------------------------------------------------------------------
+# Rate limiting — max actions per hour (in-memory, resets on restart)
+# ---------------------------------------------------------------------------
+
+_MAX_ACTIONS_PER_HOUR = 10
+_rate_state: dict = {"bucket": None, "count": 0}
+
+
+def _rate_limit_check() -> bool:
+    """Return True if action is allowed; False if hourly cap reached."""
+    bucket = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+    if _rate_state["bucket"] != bucket:
+        _rate_state["bucket"] = bucket
+        _rate_state["count"] = 0
+    if _rate_state["count"] >= _MAX_ACTIONS_PER_HOUR:
+        return False
+    _rate_state["count"] += 1
+    return True
+
 
 def _ts() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -140,6 +159,19 @@ def execute_approval(
     if status in ("sent", "posted", "failed"):
         return {"status": "skipped", "reason": f"Already processed: status={status}", "file": approval_file.name}
 
+    # ── Expiry check ──────────────────────────────────────────────────────
+    expires_at_raw = fm.get("expires_at")
+    if expires_at_raw and not dry_run:
+        try:
+            exp_dt = datetime.fromisoformat(str(expires_at_raw))
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > exp_dt:
+                print(f"  ⚠ Expired at {expires_at_raw} — skipping. Move to Rejected/ to clean up.")
+                return {"status": "skipped", "reason": f"Approval expired at {expires_at_raw}", "file": approval_file.name}
+        except ValueError:
+            pass
+
     if not action:
         return {"status": "error", "reason": "No 'action' field in frontmatter.", "file": approval_file.name}
 
@@ -163,6 +195,13 @@ def execute_approval(
         print(f"  DRY-RUN cmd: {' '.join(cmd[:6])}...")
         _audit(vault, "dry_run", action=action, file=approval_file.name)
         return {"status": "dry_run", "action": action, "file": approval_file.name}
+
+    # ── Rate limit ────────────────────────────────────────────────────────
+    if not _rate_limit_check():
+        msg = f"Rate limit reached ({_MAX_ACTIONS_PER_HOUR}/hr). Will retry next hour."
+        print(f"  ⚠ {msg}")
+        _audit(vault, "rate_limited", action=action, file=approval_file.name, limit=_MAX_ACTIONS_PER_HOUR)
+        return {"status": "skipped", "reason": msg, "file": approval_file.name}
 
     # ── Execute ──────────────────────────────────────────────────────────
     try:
