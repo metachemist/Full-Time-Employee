@@ -52,8 +52,11 @@ load_dotenv()
 # Constants
 # ---------------------------------------------------------------------------
 
-# Read-only scope is sufficient for monitoring
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+# Read + send scopes — shared token used by both watcher and gmail-sender skill
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+]
 
 # Stored alongside other watcher state
 _TOKEN_FILE = Path(__file__).parent / ".state" / "gmail_token.json"
