@@ -87,8 +87,8 @@ LEAD_KEYWORDS: frozenset[str] = frozenset(
 # Maximum items to inspect per page per cycle
 _MAX_ITEMS = 25
 
-# Check interval: 5 minutes — respectful of LinkedIn's rate limits
-_CHECK_INTERVAL = 300
+# Check interval: 30 seconds
+_CHECK_INTERVAL = 30
 
 # ---------------------------------------------------------------------------
 # Selectors — confirmed against LinkedIn 2026-02-21 via debug_linkedin.py

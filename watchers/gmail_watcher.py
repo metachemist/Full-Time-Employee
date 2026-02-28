@@ -105,7 +105,7 @@ class GmailWatcher(BaseWatcher):
     """
 
     def __init__(self, vault_path: str, credentials_path: str):
-        super().__init__(vault_path, check_interval=120)  # poll every 2 minutes
+        super().__init__(vault_path, check_interval=30)  # poll every 30 seconds
 
         creds_path = Path(credentials_path).expanduser().resolve()
         if not creds_path.exists():
