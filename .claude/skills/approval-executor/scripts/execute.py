@@ -110,6 +110,7 @@ _SKILLS_DIR = _PROJECT_DIR / ".claude" / "skills"
 _ACTION_SCRIPTS: dict[str, Path] = {
     "send_email":                    _SKILLS_DIR / "gmail-sender"    / "scripts" / "send_email.py",
     "send_linkedin_post":            _SKILLS_DIR / "linkedin-poster" / "scripts" / "create_post.py",
+    "send_linkedin_dm":              _SKILLS_DIR / "linkedin-dm"     / "scripts" / "send_dm.py",
 }
 
 
@@ -132,6 +133,15 @@ def _build_args(action: str, body: str) -> list[str] | None:
         if not message:
             return None
         args = ["--content", message]
+        session = os.environ.get("LINKEDIN_SESSION_PATH", "")
+        if session:
+            args += ["--session-path", session]
+        return args
+
+    if action == "send_linkedin_dm":
+        if not target or not message:
+            return None
+        args = ["--to-profile", target, "--message", message]
         session = os.environ.get("LINKEDIN_SESSION_PATH", "")
         if session:
             args += ["--session-path", session]
