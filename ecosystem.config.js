@@ -33,8 +33,9 @@ module.exports = {
       cwd:         WATCHERS_DIR,
       watch:       false,
       autorestart: true,
-      max_restarts: 10,
-      restart_delay: 5000,
+      max_restarts: 9999,
+      min_uptime: "10s",
+      exp_backoff_restart_delay: 100,
       env: {
         PYTHONUNBUFFERED: "1",
       },
@@ -52,35 +53,15 @@ module.exports = {
       cwd:         WATCHERS_DIR,
       watch:       false,
       autorestart: true,
-      max_restarts: 10,
-      restart_delay: 15000,   // back off 15 s on crash (auth errors etc.)
+      max_restarts: 9999,
+      min_uptime: "10s",
+      exp_backoff_restart_delay: 100,
       env_file:    path.resolve(__dirname, ".env"),
       env: {
         PYTHONUNBUFFERED: "1",
       },
       log_file:    path.resolve(__dirname, "logs", "pm2-gmail.log"),
       error_file:  path.resolve(__dirname, "logs", "pm2-gmail-error.log"),
-      merge_logs:  true,
-    },
-
-    // ── WhatsApp Watcher ───────────────────────────────────────────────────
-    {
-      name:        "watcher-whatsapp",
-      script:      path.join(WATCHERS_DIR, "whatsapp_watcher.py"),
-      interpreter: "python3",
-      args:        VAULT_PATH,
-      cwd:         WATCHERS_DIR,
-      watch:       false,
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 10000,
-      env_file:    path.resolve(__dirname, ".env"),
-      env: {
-        PYTHONUNBUFFERED: "1",
-        WHATSAPP_HEADLESS: "true",
-      },
-      log_file:    path.resolve(__dirname, "logs", "pm2-whatsapp.log"),
-      error_file:  path.resolve(__dirname, "logs", "pm2-whatsapp-error.log"),
       merge_logs:  true,
     },
 
@@ -93,8 +74,9 @@ module.exports = {
       cwd:         WATCHERS_DIR,
       watch:       false,
       autorestart: true,
-      max_restarts: 10,
-      restart_delay: 15000,
+      max_restarts: 9999,
+      min_uptime: "10s",
+      exp_backoff_restart_delay: 100,
       env_file:    path.resolve(__dirname, ".env"),
       env: {
         PYTHONUNBUFFERED: "1",
@@ -102,6 +84,27 @@ module.exports = {
       },
       log_file:    path.resolve(__dirname, "logs", "pm2-linkedin.log"),
       error_file:  path.resolve(__dirname, "logs", "pm2-linkedin-error.log"),
+      merge_logs:  true,
+    },
+
+    // ── Approval Executor (Phase 2 — HITL dispatcher) ─────────────────────
+    {
+      name:        "approval-executor",
+      script:      path.resolve(__dirname, ".claude", "skills", "approval-executor", "scripts", "execute.py"),
+      interpreter: "python3",
+      args:        ["--vault", VAULT_PATH, "--loop", "--interval", "30"],
+      cwd:         path.resolve(__dirname),
+      watch:       false,
+      autorestart: true,
+      max_restarts: 9999,
+      min_uptime: "10s",
+      exp_backoff_restart_delay: 100,
+      env: {
+        PYTHONUNBUFFERED: "1",
+        PYTHONPATH:       path.resolve(__dirname),
+      },
+      log_file:    path.resolve(__dirname, "logs", "pm2-executor.log"),
+      error_file:  path.resolve(__dirname, "logs", "pm2-executor-error.log"),
       merge_logs:  true,
     },
 
@@ -114,8 +117,9 @@ module.exports = {
       cwd:         path.resolve(__dirname),
       watch:       false,
       autorestart: true,
-      max_restarts: 10,
-      restart_delay: 5000,
+      max_restarts: 9999,
+      min_uptime: "10s",
+      exp_backoff_restart_delay: 100,
       env: {
         PYTHONUNBUFFERED: "1",
         PYTHONPATH:       path.resolve(__dirname),

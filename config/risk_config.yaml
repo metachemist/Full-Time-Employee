@@ -1,0 +1,79 @@
+# Risk Classification Configuration
+# Edit these lists to tune what the planning engine flags as high/medium risk
+# and what triggers human approval. Changes take effect on the next engine restart.
+
+high_risk:
+  - money
+  - legal
+  - threat
+  - complaint
+  - fraud
+  - scam
+  - lawsuit
+  - court
+  - police
+  - blackmail
+  - hack
+  - breach
+  - stolen
+  - dispute
+  - emergency
+  - critical
+  - overdue
+  - terminate
+  - suspend
+  - banned
+  - illegal
+  - attorney
+  - solicitor
+  - chargeback
+  - arbitration
+
+medium_risk:
+  - pricing
+  - price
+  - proposal
+  - hire
+  - hiring
+  - negotiate
+  - negotiation
+  - partnership
+  - contract
+  - agreement
+  - deal
+  - offer
+  - quote
+  - quotation
+  - budget
+  - revenue
+  - sales
+  - client
+  - customer
+  - invoice
+  - payment
+  - refund
+  - purchase
+  - subscription
+  - retainer
+
+# Keywords that always trigger human approval regardless of source
+approval_triggers:
+  - urgent
+  - payment
+  - invoice
+  - refund
+  - pricing
+  - quote
+  - budget
+  - contract
+  - complaint
+  - asap
+  - money
+  - transfer
+  - bank
+  - pay
+  - send
+  - post
+  - publish
+  - reply
+  - respond

@@ -38,7 +38,7 @@ import re
 import sys
 import time
 import textwrap
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -80,28 +80,48 @@ def _setup_logging() -> None:
 _setup_logging()
 
 # ---------------------------------------------------------------------------
-# Risk & approval classification tables
+# Risk & approval classification tables (loaded from config/risk_config.yaml)
 # ---------------------------------------------------------------------------
 
-_HIGH_RISK_KEYWORDS = frozenset({
+_CONFIG_PATH = Path(__file__).parent.parent / "config" / "risk_config.yaml"
+
+# Hardcoded defaults (used as fallback if config file is missing/broken)
+_HIGH_RISK_KEYWORDS_DEFAULT = frozenset({
     "money", "legal", "threat", "complaint", "fraud", "scam", "lawsuit",
     "court", "police", "blackmail", "hack", "breach", "stolen", "dispute",
     "emergency", "critical", "overdue", "terminate", "suspend", "banned",
     "illegal", "attorney", "solicitor", "chargeback", "arbitration",
 })
 
-_MEDIUM_RISK_KEYWORDS = frozenset({
+_MEDIUM_RISK_KEYWORDS_DEFAULT = frozenset({
     "pricing", "price", "proposal", "hire", "hiring", "negotiate",
     "negotiation", "partnership", "contract", "agreement", "deal", "offer",
     "quote", "quotation", "budget", "revenue", "sales", "client", "customer",
     "invoice", "payment", "refund", "purchase", "subscription", "retainer",
 })
 
-_APPROVAL_TRIGGERS = frozenset({
+_APPROVAL_TRIGGERS_DEFAULT = frozenset({
     "urgent", "payment", "invoice", "refund", "pricing", "quote", "budget",
     "contract", "complaint", "asap", "money", "transfer", "bank", "pay",
     "send", "post", "publish", "reply", "respond",
 })
+
+
+def _load_risk_config() -> tuple[frozenset, frozenset, frozenset]:
+    """Load risk keyword lists from config/risk_config.yaml, fall back to defaults."""
+    if not _CONFIG_PATH.exists():
+        return _HIGH_RISK_KEYWORDS_DEFAULT, _MEDIUM_RISK_KEYWORDS_DEFAULT, _APPROVAL_TRIGGERS_DEFAULT
+    try:
+        cfg = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8")) or {}
+        high    = frozenset(cfg.get("high_risk", [])) or _HIGH_RISK_KEYWORDS_DEFAULT
+        medium  = frozenset(cfg.get("medium_risk", [])) or _MEDIUM_RISK_KEYWORDS_DEFAULT
+        triggers = frozenset(cfg.get("approval_triggers", [])) or _APPROVAL_TRIGGERS_DEFAULT
+        return high, medium, triggers
+    except Exception:
+        return _HIGH_RISK_KEYWORDS_DEFAULT, _MEDIUM_RISK_KEYWORDS_DEFAULT, _APPROVAL_TRIGGERS_DEFAULT
+
+
+_HIGH_RISK_KEYWORDS, _MEDIUM_RISK_KEYWORDS, _APPROVAL_TRIGGERS = _load_risk_config()
 
 # Sources that always require approval (any external communication)
 _EXTERNAL_SOURCES = {"gmail", "whatsapp", "linkedin"}
@@ -435,12 +455,15 @@ def build_approval(
     action_label  = action.replace("_", " ").title()
     draft_block   = textwrap.indent(draft.strip(), "  ")
 
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=72)).isoformat()
+
     return f"""\
 ---
 type: approval_request
 action: {action}
 source_plan: {rel_plan}
 created: {_now_iso()}
+expires_at: {expires_at}
 status: pending
 ---
 
@@ -679,47 +702,58 @@ class PlanningEngine:
             appr_name     = self._approval_filename(action, sender_raw, md_file.stem)
             approval_path = self.vault / "Pending_Approval" / appr_name
 
-        # ── Write Plan ─────────────────────────────────────────────────
-        plan_content = build_plan(
-            source_file     = md_file,
-            vault_path      = self.vault,
-            source          = source,
-            fm              = fm,
-            body            = body,
-            priority        = priority,
-            risk            = risk,
-            approval_needed = approval,
-            plan_path       = plan_path,
-            approval_path   = approval_path,
-        )
-        plan_path.write_text(plan_content, encoding="utf-8")
-        self.log.info(f"  Plan      → Plans/{plan_name}")
-
-        # ── Write Approval ─────────────────────────────────────────────
-        if approval_path:
-            draft        = generate_draft(source, fm, body)
-            action_str   = action_for(source, fm)
-            appr_content = build_approval(
-                action      = action_str,
-                plan_path   = plan_path,
-                vault_path  = self.vault,
-                source      = source,
-                fm          = fm,
-                body        = body,
-                draft       = draft,
+        # ── Write Plan, Approval, move original (with rollback on failure) ──
+        plan_written     = False
+        approval_written = False
+        try:
+            plan_content = build_plan(
+                source_file     = md_file,
+                vault_path      = self.vault,
+                source          = source,
+                fm              = fm,
+                body            = body,
+                priority        = priority,
+                risk            = risk,
+                approval_needed = approval,
+                plan_path       = plan_path,
+                approval_path   = approval_path,
             )
-            approval_path.write_text(appr_content, encoding="utf-8")
-            self.log.info(f"  Approval  → Pending_Approval/{approval_path.name}")
+            plan_path.write_text(plan_content, encoding="utf-8")
+            plan_written = True
+            self.log.info(f"  Plan      → Plans/{plan_name}")
 
-        # ── Move original to Done ──────────────────────────────────────
-        done_dest = self.vault / "Done" / filename
-        if done_dest.exists():  # avoid collision
-            stem, sfx = done_dest.stem, done_dest.suffix
-            done_dest = done_dest.with_name(f"{stem}_{int(time.time())}{sfx}")
-        md_file.rename(done_dest)
-        self.log.info(f"  Archived  → Done/{done_dest.name}")
+            if approval_path:
+                draft        = generate_draft(source, fm, body)
+                action_str   = action_for(source, fm)
+                appr_content = build_approval(
+                    action      = action_str,
+                    plan_path   = plan_path,
+                    vault_path  = self.vault,
+                    source      = source,
+                    fm          = fm,
+                    body        = body,
+                    draft       = draft,
+                )
+                approval_path.write_text(appr_content, encoding="utf-8")
+                approval_written = True
+                self.log.info(f"  Approval  → Pending_Approval/{approval_path.name}")
 
-        # ── Persist state ──────────────────────────────────────────────
+            done_dest = self.vault / "Done" / filename
+            if done_dest.exists():
+                stem, sfx = done_dest.stem, done_dest.suffix
+                done_dest = done_dest.with_name(f"{stem}_{int(time.time())}{sfx}")
+            md_file.rename(done_dest)
+            self.log.info(f"  Archived  → Done/{done_dest.name}")
+
+        except Exception:
+            # Clean up any partially written files so the next cycle can retry
+            if plan_written and plan_path.exists():
+                plan_path.unlink(missing_ok=True)
+            if approval_written and approval_path and approval_path.exists():
+                approval_path.unlink(missing_ok=True)
+            raise
+
+        # ── Persist state (only after all writes succeed) ──────────────
         self.state.mark_processed(
             filename,
             plan_path     = str(plan_path.relative_to(self.vault)),
