@@ -68,7 +68,12 @@ def send_dm(
         try:
             # ── Navigate to profile ───────────────────────────────────────
             page.goto(to_profile, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_timeout(2000)
+            # Wait for profile actions to fully initialise
+            try:
+                page.wait_for_selector("button[aria-label*='Message']", timeout=10_000)
+            except PlaywrightTimeout:
+                pass
+            page.wait_for_timeout(1000)
 
             if "authwall" in page.url or "login" in page.url:
                 return {
@@ -85,20 +90,18 @@ def send_dm(
                 pass
 
             # ── Click Message button ──────────────────────────────────────
-            msg_selectors = [
-                "button[aria-label*='Message']",
-                "a[aria-label*='Message']",
-                "button:has-text('Message')",
-                ".pvs-profile-actions button:has-text('Message')",
-            ]
-            clicked = False
-            for sel in msg_selectors:
-                try:
-                    page.click(sel, timeout=5000)
-                    clicked = True
-                    break
-                except PlaywrightTimeout:
-                    continue
+            # Use JS click to bypass overlay/stale-element issues
+            clicked = page.evaluate("""
+                () => {
+                    const btn = document.querySelector("button[aria-label*='Message']");
+                    if (btn) { btn.click(); return true; }
+                    // fallback: find any button whose text contains 'Message'
+                    for (const b of document.querySelectorAll('button')) {
+                        if (b.innerText.trim() === 'Message') { b.click(); return true; }
+                    }
+                    return false;
+                }
+            """)
 
             if not clicked:
                 page.screenshot(path="/tmp/linkedin_dm_debug.png")
