@@ -1,5 +1,5 @@
 ---
-updated: 2026-02-28T21:31:14.293950+00:00
+updated: 2026-02-28T21:54:14.431337+00:00
 ---
 
 # AI Employee — Dashboard
@@ -13,7 +13,7 @@ updated: 2026-02-28T21:31:14.293950+00:00
 | ⏳ Pending Approval | 0     |
 | ✅ Approved        | 0     |
 | ❌ Rejected        | 3     |
-| 🗂 Done            | 14     |
+| 🗂 Done            | 9     |
 
 ## Recent Activity
 
@@ -23,4 +23,4 @@ updated: 2026-02-28T21:31:14.293950+00:00
 - `2026-02-28 20:42 UTC` [LINKEDIN] Shehryar Ahmed → `PLAN_LINKEDIN_Shehryar_Ahmed_LINKEDIN_LEAD_Shehry_2026-03-01.md` + `APPROVAL_SEND_LINKEDIN_DM_Shehryar_Ahmed_LINKEDIN_LEAD_Sh_2026-03-01.md`
 
 ---
-*Updated by Planning Engine — 2026-02-28 21:31 UTC*
+*Updated by Planning Engine — 2026-02-28 21:54 UTC*
