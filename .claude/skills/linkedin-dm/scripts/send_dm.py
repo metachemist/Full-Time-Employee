@@ -3,7 +3,9 @@
 LinkedIn DM Sender — AI Employee Silver Tier skill script.
 
 Sends a direct message to a LinkedIn connection by navigating to their
-profile and using the Message button.
+profile and using the Message button. Handles both:
+  - Direct thread (Message opens an existing conversation)
+  - Compose dialog (Message opens "New message" with a recipient search box)
 
 Usage:
     python send_dm.py --to-profile https://linkedin.com/in/username --message "Hi there"
@@ -41,9 +43,9 @@ def send_dm(
 
     if dry_run:
         return {
-            "status":   "dry_run",
-            "to":       to_profile,
-            "preview":  message[:120] + ("..." if len(message) > 120 else ""),
+            "status":    "dry_run",
+            "to":        to_profile,
+            "preview":   message[:120] + ("..." if len(message) > 120 else ""),
             "timestamp": _ts(),
         }
 
@@ -68,7 +70,6 @@ def send_dm(
             page.goto(to_profile, wait_until="domcontentloaded", timeout=30_000)
             page.wait_for_timeout(2000)
 
-            # ── Check login state ─────────────────────────────────────────
             if "authwall" in page.url or "login" in page.url:
                 return {
                     "status": "error",
@@ -76,13 +77,19 @@ def send_dm(
                     "timestamp": _ts(),
                 }
 
-            # ── Click Message button on profile ───────────────────────────
+            # ── Grab recipient name from profile page ─────────────────────
+            recipient_name = ""
+            try:
+                recipient_name = page.locator("h1").first.inner_text(timeout=5000).strip()
+            except Exception:
+                pass
+
+            # ── Click Message button ──────────────────────────────────────
             msg_selectors = [
                 "button[aria-label*='Message']",
                 "a[aria-label*='Message']",
                 "button:has-text('Message')",
                 ".pvs-profile-actions button:has-text('Message')",
-                ".pv-top-card-profile-picture ~ div button:has-text('Message')",
             ]
             clicked = False
             for sel in msg_selectors:
@@ -97,21 +104,72 @@ def send_dm(
                 page.screenshot(path="/tmp/linkedin_dm_debug.png")
                 return {
                     "status": "error",
-                    "error":  "Could not find Message button on profile. Screenshot saved to /tmp/linkedin_dm_debug.png",
+                    "error":  "Could not find Message button on profile. Screenshot: /tmp/linkedin_dm_debug.png",
                     "timestamp": _ts(),
                 }
 
             page.wait_for_timeout(1500)
 
-            # ── Type message in the chat input ────────────────────────────
-            input_selectors = [
+            # ── Handle compose dialog (New message with recipient search) ──
+            # LinkedIn opens this when messaging yourself or in some contexts
+            compose_input_selectors = [
+                "input[placeholder*='name']",
+                "input[placeholder*='Name']",
+                ".msg-connections-typeahead__search-input",
+                "input.msg-compose-recipient-input",
+            ]
+            compose_found = False
+            for sel in compose_input_selectors:
+                if page.locator(sel).count() > 0:
+                    compose_found = True
+                    # Type recipient name to search
+                    search_name = recipient_name.split()[0] if recipient_name else ""
+                    if not search_name:
+                        page.screenshot(path="/tmp/linkedin_dm_debug.png")
+                        return {
+                            "status": "error",
+                            "error":  "Compose dialog appeared but could not determine recipient name.",
+                            "timestamp": _ts(),
+                        }
+                    page.click(sel, timeout=3000)
+                    page.keyboard.type(search_name, delay=100)
+                    page.wait_for_timeout(1500)
+
+                    # Click the first matching suggestion
+                    suggestion_selectors = [
+                        "li.msg-connections-typeahead__connection",
+                        "li.search-typeahead-v2__hit",
+                        "div[data-view-name='search-typeahead-hit']",
+                        "ul li:first-child",
+                    ]
+                    selected = False
+                    for sug_sel in suggestion_selectors:
+                        try:
+                            page.click(sug_sel, timeout=3000)
+                            selected = True
+                            break
+                        except PlaywrightTimeout:
+                            continue
+
+                    if not selected:
+                        page.screenshot(path="/tmp/linkedin_dm_debug.png")
+                        return {
+                            "status": "error",
+                            "error":  f"Could not select '{search_name}' from compose suggestions. Screenshot: /tmp/linkedin_dm_debug.png",
+                            "timestamp": _ts(),
+                        }
+                    page.wait_for_timeout(1000)
+                    break
+
+            # ── Find message input and type ───────────────────────────────
+            msg_input_selectors = [
                 "div.msg-form__contenteditable[contenteditable='true']",
                 "div[role='textbox'][contenteditable='true']",
                 "div.msg-form__contenteditable",
-                "p.msg-form__placeholder",
+                "div[data-placeholder]",
             ]
             typed = False
-            for sel in input_selectors:
+            for sel in msg_input_selectors:
                 try:
                     page.click(sel, timeout=5000)
                     page.keyboard.type(message, delay=20)
@@ -124,13 +182,13 @@ def send_dm(
                 page.screenshot(path="/tmp/linkedin_dm_debug.png")
                 return {
                     "status": "error",
-                    "error":  "Could not find message input box. Screenshot saved to /tmp/linkedin_dm_debug.png",
+                    "error":  "Could not find message input box. Screenshot: /tmp/linkedin_dm_debug.png",
                     "timestamp": _ts(),
                 }
 
             page.wait_for_timeout(500)
 
-            # ── Send message ──────────────────────────────────────────────
+            # ── Send ──────────────────────────────────────────────────────
             send_selectors = [
                 "button.msg-form__send-button",
                 "button[aria-label='Send']",
@@ -146,7 +204,6 @@ def send_dm(
                     continue
 
             if not sent:
-                # Fallback: press Enter to send
                 try:
                     page.keyboard.press("Enter")
                     sent = True
@@ -154,21 +211,17 @@ def send_dm(
                     pass
 
             if not sent:
-                return {
-                    "status": "error",
-                    "error":  "Could not find Send button.",
-                    "timestamp": _ts(),
-                }
+                return {"status": "error", "error": "Could not find Send button.", "timestamp": _ts()}
 
             page.wait_for_timeout(2000)
 
-            # ── Screenshot for audit ──────────────────────────────────────
             screenshot_path = f"/tmp/linkedin_dm_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             page.screenshot(path=screenshot_path)
 
             return {
                 "status":           "sent",
                 "to":               to_profile,
+                "to_name":          recipient_name,
                 "screenshot":       screenshot_path,
                 "message_preview":  message[:80] + ("..." if len(message) > 80 else ""),
                 "timestamp":        _ts(),
@@ -195,8 +248,7 @@ def main() -> None:
                         help=f"Path to LinkedIn Playwright session (default: {_DEFAULT_SESSION})")
     parser.add_argument("--headless",    action="store_true", default=True)
     parser.add_argument("--no-headless", dest="headless", action="store_false")
-    parser.add_argument("--dry-run",     action="store_true",
-                        help="Preview without sending")
+    parser.add_argument("--dry-run",     action="store_true")
     args = parser.parse_args()
 
     session_path = Path(args.session_path).expanduser().resolve()
