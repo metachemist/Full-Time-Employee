@@ -1,263 +1,393 @@
 # Personal AI Employee — Silver Tier
 
-> *Your life and business on autopilot. Local-first, agent-driven, human-in-the-loop.*
-
-A working implementation of an autonomous **Digital FTE** (Full-Time Equivalent) — an AI agent that proactively manages personal and business communications 24/7 using Claude Code as the reasoning engine and Obsidian as the shared memory layer.
-
----
-
-## How It Works
-
-The system follows a continuous **Perception → Reasoning → Action** loop:
+An autonomous AI agent that monitors your Gmail and LinkedIn, drafts responses, and executes approved actions — without you touching the apps. Built on Claude Code + Obsidian as the shared brain.
 
 ```
-Gmail / WhatsApp / LinkedIn / Files
-         ↓
-Watchers (Python) → vault/Needs_Action/
-         ↓
-Planning Engine → vault/Plans/ + vault/Pending_Approval/
-         ↓
-Human reviews → moves to vault/Approved/
-         ↓
-Approval Executor → sends email / WhatsApp / LinkedIn post
-         ↓
-vault/Done/ + vault/Logs/  ← audit trail
-```
-
-The **Obsidian vault** is the single source of truth. Every watcher, every Claude session, and every human decision happens through plain Markdown files in the `vault/` directory.
-
----
-
-## Tier Status
-
-| Tier | Status | Description |
-|------|--------|-------------|
-| **Bronze** | ✅ Done | Vault structure, filesystem watcher, vault-operator skill |
-| **Silver** | ✅ Done | Gmail + WhatsApp + LinkedIn watchers, planning engine, email/WhatsApp/LinkedIn actions, HITL workflow, Ralph Wiggum loop, scheduling |
-| **Gold** | Planned | Odoo accounting, weekly CEO briefing, full cross-domain integration |
-| **Platinum** | Planned | Always-on cloud agent, cloud/local split, Syncthing vault sync |
-
----
-
-## Repository Layout
-
-```
-.claude/
-  hooks/
-    ralph_wiggum.py         # Stop hook — re-injects task if work remains
-  skills/
-    vault-operator/         # Read/write vault, process tasks, update dashboard
-    browsing-with-playwright/ # Browser automation (22 Playwright tools)
-    gmail-sender/           # Send approved emails via Gmail API
-    whatsapp-sender/        # Send approved WhatsApp messages via Playwright
-    linkedin-poster/        # Publish approved LinkedIn posts via Playwright
-    approval-executor/      # Dispatch all approved actions to correct sender
-  settings.local.json       # Permissions + Ralph Wiggum hook registration
-
-vault/
-  Dashboard.md              # Live status — check this daily
-  Company_Handbook.md       # Autonomy rules — Claude reads before every action
-  Inbox/                    # Drop files here; filesystem watcher picks them up
-  Needs_Action/             # Watcher-generated task files for Claude to process
-  Plans/                    # Claude writes step-by-step plans here
-  Pending_Approval/         # Approval requests waiting for human decision
-  Approved/                 # Move files here to authorise an action
-  Rejected/                 # Move files here to cancel an action
-  Done/                     # Completed tasks land here
-  Logs/                     # Append-only JSONL audit log (one file per day)
-
-watchers/
-  base_watcher.py           # Abstract base: state persistence, retries, logging
-  filesystem_watcher.py     # Watches vault/Inbox/, creates Needs_Action entries
-  gmail_watcher.py          # Polls Gmail API (unread+important) → Needs_Action
-  whatsapp_watcher.py       # Scrapes WhatsApp Web (Playwright) → Needs_Action
-  linkedin_watcher.py       # Scrapes LinkedIn DMs + connections → Needs_Action
-  auth_linkedin.py          # One-time LinkedIn session setup
-  requirements.txt          # Python deps
-
-orchestrator/
-  planning_engine.py        # Scans Needs_Action, classifies, writes Plans + Approvals
-
-cron/
-  crontab.example           # Cron schedule for daily briefings, weekly reviews
-
-ecosystem.config.js         # PM2 config: 4 watchers + planning engine + executor
+Gmail / LinkedIn / Files
+        ↓
+  Watchers (Python, PM2)
+        ↓
+  vault/Needs_Action/
+        ↓
+  Planning Engine
+        ↓
+  vault/Pending_Approval/
+        ↓
+  You review → move to vault/Approved/
+        ↓
+  Approval Executor
+        ↓
+  Email sent / LinkedIn posted
+        ↓
+  vault/Done/ + audit log
 ```
 
 ---
 
-## Prerequisites
+## What It Does
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| [Claude Code](https://claude.ai/code) | Latest | Reasoning engine |
-| [Obsidian](https://obsidian.md) | v1.10.6+ | Vault GUI |
-| Python | 3.11+ | Watchers + orchestrator |
-| Node.js | v18+ LTS | Playwright MCP server |
-| PM2 | Latest | Process management (`npm install -g pm2`) |
+| Capability | Detail |
+|---|---|
+| Gmail monitoring | Polls every 30s, detects unread + important emails |
+| LinkedIn monitoring | Polls every 30s, detects new DMs and connection requests |
+| File drop | Drop any file in `vault/Inbox/` → processed automatically |
+| Risk classification | Classifies every item as high / medium / low risk |
+| Draft generation | Writes a reply plan + approval request for every action |
+| Human-in-the-loop | Nothing is sent without you approving it |
+| Email sending | Sends via Gmail API after approval |
+| LinkedIn posting | Posts via Playwright (headless Chromium) after approval |
+| Audit trail | Every action logged to `vault/Logs/YYYY-MM-DD.jsonl` |
 
 ---
 
-## Quick Start
+## Repository Structure
 
-### 1. Install dependencies
+```
+full_time_employee/
+├── ecosystem.config.js          # PM2 config — 5 background processes
+├── .env.example                 # Environment variable template
+│
+├── watchers/                    # Perception layer
+│   ├── base_watcher.py          # Abstract base (retry, state persistence, logging)
+│   ├── filesystem_watcher.py    # Watches vault/Inbox/ for dropped files
+│   ├── gmail_watcher.py         # Polls Gmail API for unread+important emails
+│   ├── linkedin_watcher.py      # Scrapes LinkedIn for DMs + connections
+│   ├── auth_linkedin.py         # One-time LinkedIn session setup
+│   └── requirements.txt         # Python dependencies
+│
+├── orchestrator/
+│   └── planning_engine.py       # Reads Needs_Action/, writes Plans/ + approvals
+│
+├── config/
+│   └── risk_config.yaml         # Tunable risk keywords (edit to change thresholds)
+│
+├── .claude/
+│   ├── skills/
+│   │   ├── approval-executor/   # Batch dispatcher — reads Approved/, runs actions
+│   │   ├── gmail-sender/        # Send email via Gmail API
+│   │   ├── linkedin-poster/     # Post to LinkedIn via Playwright
+│   │   ├── vault-operator/      # Claude skill for reading/writing the vault
+│   │   └── browsing-with-playwright/  # MCP browser automation server (22 tools)
+│   └── hooks/
+│       └── ralph_wiggum.py      # Stop hook — blocks exit if vault has pending work
+│
+├── vault/                       # Obsidian vault (shared state + human GUI)
+│   ├── Dashboard.md             # Live status — updated after every session
+│   ├── Company_Handbook.md      # Autonomy rules — what requires approval
+│   ├── Inbox/                   # Drop files here to trigger processing
+│   ├── Needs_Action/            # Watchers write here; planning engine reads
+│   ├── Plans/                   # Plans generated by planning engine
+│   ├── Pending_Approval/        # Awaiting your review
+│   ├── Approved/                # Move files here to execute
+│   ├── Rejected/                # Move files here to cancel
+│   ├── Done/                    # Completed tasks (audit archive)
+│   └── Logs/                    # JSONL audit logs + planning state
+│
+└── tests/                       # pytest test suite (62 tests)
+    ├── conftest.py
+    ├── test_planning_engine.py
+    └── test_executor.py
+```
+
+---
+
+## Setup (Fork & Run on Your Own System)
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js v18+
+- A Gmail account with Google Cloud API access
+- A LinkedIn account
+- [Obsidian](https://obsidian.md) (optional but recommended as the vault GUI)
+
+---
+
+### Step 1 — Clone & Python environment
 
 ```bash
+git clone https://github.com/your-username/full_time_employee.git
+cd full_time_employee
+
 python3 -m venv .venv
-source .venv/bin/activate          # or .venv\Scripts\activate on Windows
+source .venv/bin/activate
 pip install -r watchers/requirements.txt
-.venv/bin/playwright install chromium
+pip install pyyaml python-dotenv playwright
+playwright install chromium
 ```
 
-### 2. Configure credentials
+---
+
+### Step 2 — Install PM2
+
+```bash
+npm install pm2
+```
+
+Optional shorthand so you can type `pm2` directly:
+
+```bash
+ln -s "$(pwd)/node_modules/.bin/pm2" ~/.local/bin/pm2
+```
+
+---
+
+### Step 3 — Gmail API credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create a project → Enable **Gmail API**
+3. Go to **APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID**
+4. Application type: **Desktop app**
+5. Download the JSON file — save it somewhere safe (e.g. `~/.gmail_credentials.json`)
+
+---
+
+### Step 4 — Environment variables
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in:
-#   GMAIL_CREDENTIALS=/absolute/path/to/credentials.json
-#   WHATSAPP_SESSION_PATH=/home/you/.sessions/whatsapp
-#   LINKEDIN_SESSION_PATH=/home/you/.sessions/linkedin
 ```
 
-**Gmail:** Download `credentials.json` from [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials (OAuth 2.0).
+Edit `.env` with your values:
 
-**WhatsApp session:** Run once with a visible browser to scan the QR code:
+```env
+GMAIL_CREDENTIALS=/absolute/path/to/your/credentials.json
+LINKEDIN_SESSION_PATH=/absolute/path/to/full_time_employee/.sessions/linkedin
+LINKEDIN_HEADLESS=true
+```
+
+---
+
+### Step 5 — LinkedIn session (one-time login)
+
 ```bash
-WHATSAPP_HEADLESS=false python watchers/whatsapp_watcher.py ./vault
-# Scan QR code in the browser, then Ctrl+C once logged in
+cd watchers
+LINKEDIN_HEADLESS=false python auth_linkedin.py
 ```
 
-**LinkedIn session:** Run the auth helper:
+A browser window opens. Log in to LinkedIn with your email and password (do not use Google Sign-In). Once logged in the session is saved to `.sessions/linkedin/` and reused automatically from that point forward.
+
+---
+
+### Step 6 — Gmail OAuth (one-time login)
+
+The first time the Gmail watcher starts it will open a browser for the OAuth consent screen:
+
 ```bash
-python watchers/auth_linkedin.py
-# Log in with email + password (not Google Sign-In)
+source .venv/bin/activate
+python watchers/gmail_watcher.py vault
 ```
 
-### 3. Start all processes with PM2
+Authorise access in the browser. The token is saved to `watchers/.state/gmail_token.json` and reused automatically.
+
+> The token must include both `gmail.readonly` and `gmail.send` scopes. The watcher requests both automatically — just make sure to grant both during the consent flow.
+
+---
+
+### Step 7 — Start all processes
 
 ```bash
 pm2 start ecosystem.config.js
-pm2 save && pm2 startup           # survive reboots
-pm2 logs                          # tail all logs
+pm2 save
+pm2 startup    # follow the printed sudo command to survive reboots
 ```
 
-This starts:
-- `watcher-filesystem` — monitors vault/Inbox/
-- `watcher-gmail` — polls Gmail every 2 minutes
-- `watcher-whatsapp` — scrapes WhatsApp Web every 30 seconds
-- `watcher-linkedin` — scrapes LinkedIn every 5 minutes
-- `planning-engine` — processes Needs_Action every 30 seconds
-- `approval-executor` — dispatches approved actions every 30 seconds
-
-### 4. Open the vault in Obsidian
-
-Point Obsidian at the `vault/` directory. The Dashboard.md shows live counts.
-
-### 5. Set up cron (for scheduled briefings)
+Verify everything is running:
 
 ```bash
-# Edit cron/crontab.example: replace /path/to/full_time_employee with your real path
-sed -i 's|/path/to/full_time_employee|'$(pwd)'|g' cron/crontab.example
-crontab cron/crontab.example
+pm2 list
 ```
+
+You should see 5 processes all `online`:
+
+| Name | Role | Interval |
+|---|---|---|
+| `watcher-filesystem` | Watches vault/Inbox/ | Event-driven |
+| `watcher-gmail` | Polls Gmail API | Every 30s |
+| `watcher-linkedin` | Scrapes LinkedIn | Every 30s |
+| `planning-engine` | Processes Needs_Action/ | Every 30s |
+| `approval-executor` | Executes Approved/ | Every 30s |
+
+---
+
+### Step 8 — Run tests
+
+```bash
+.venv/bin/python -m pytest tests/ -v
+```
+
+All 62 tests should pass.
+
+---
+
+### Step 9 — Open the vault in Obsidian (optional)
+
+Point Obsidian at the `vault/` directory. `Dashboard.md` shows live counts and recent activity. `Pending_Approval/` is where you'll review and move approval files.
 
 ---
 
 ## Daily Workflow
 
-### Reviewing Approvals
+### Automatic (nothing to do)
 
-When a watcher picks up an email, WhatsApp message, or LinkedIn connection:
+1. Email or LinkedIn message arrives
+2. Watcher detects it within ~30 seconds
+3. Planning engine drafts a reply and writes a file to `vault/Pending_Approval/`
 
-1. The planning engine creates two files:
-   - `vault/Plans/PLAN_*.md` — context, risk assessment, draft reply
-   - `vault/Pending_Approval/APPROVAL_*.md` — ready-to-execute action
+### Your only job — approve or reject
 
-2. **You review** the approval file in Obsidian
+Open `vault/Pending_Approval/` in Obsidian (or any file manager):
 
-3. **To approve:** Move the file to `vault/Approved/`
-4. **To reject:** Move the file to `vault/Rejected/`
+- **Approve:** move the file to `vault/Approved/` → executor sends it within 30 seconds
+- **Reject:** move the file to `vault/Rejected/` → no action taken
 
-5. The approval executor picks it up within 30 seconds and:
-   - Sends the email / WhatsApp message / LinkedIn post
-   - Moves the file to `vault/Done/`
-   - Writes an audit log entry
+---
 
-### Posting on LinkedIn
+## Sending Manually (Without a Trigger)
 
-To create a sales or business post:
+You can create approval files directly — no incoming message needed.
 
+### Send a new email
+
+Create a file in `vault/Approved/` (name it anything):
+
+```markdown
+---
+type: approval_request
+action: send_email
+status: approved
+---
+
+# Payload
+
+- **Target:** recipient@example.com
+- **Subject / Title:** Your subject here
+
+## Message / Content
+
+  Hi,
+
+  Your email body here.
+
+  Best regards,
+  Your Name
 ```
-# In Claude Code:
-/linkedin-poster
 
-# Claude will:
-# 1. Ask what you want to post about
-# 2. Draft content using a sales framework
-# 3. Write APPROVAL_SEND_LINKEDIN_POST_*.md to vault/Pending_Approval/
-# 4. You move it to vault/Approved/ to publish
+The executor sends it within 30 seconds.
+
+### Post to LinkedIn
+
+```markdown
+---
+type: approval_request
+action: send_linkedin_post
+status: approved
+---
+
+# Payload
+
+- **Action:** `send_linkedin_post`
+- **Target:** LinkedIn Feed
+- **Subject / Title:** Post title (for your reference only)
+
+## Message / Content
+
+  Your post content here.
+
+  #Hashtag1 #Hashtag2
 ```
 
----
-
-## Ralph Wiggum Loop
-
-When Claude Code is running interactively and tries to exit, the Ralph Wiggum stop hook (`.claude/hooks/ralph_wiggum.py`) checks for:
-
-- Items in `vault/Needs_Action/` that haven't been processed
-- Items in `vault/Approved/` waiting to be executed
-
-If work remains, it blocks Claude's exit and re-injects the task — Claude keeps working until the queue is empty.
+> **The frontmatter block (`---`) at the top is required.** Without it the executor does not know the action type and skips the file.
 
 ---
 
-## Agent Skills
+## Configuration
 
-All actions are implemented as loadable Claude Code skills:
+### Risk thresholds
 
-| Skill | Trigger |
-|-------|---------|
-| `vault-operator` | Process vault tasks, update dashboard |
-| `gmail-sender` | Send approved email after HITL approval |
-| `whatsapp-sender` | Send approved WhatsApp message |
-| `linkedin-poster` | Draft + publish LinkedIn post |
-| `approval-executor` | Batch-dispatch all items in vault/Approved/ |
-| `browsing-with-playwright` | General browser automation |
+Edit `config/risk_config.yaml` to control what triggers human approval:
+
+```yaml
+high_risk:
+  - lawsuit
+  - fraud
+  - hack
+  # add keywords here...
+
+medium_risk:
+  - contract
+  - invoice
+  # add keywords here...
+
+approval_triggers:
+  # keywords that ALWAYS require approval regardless of risk level
+  - send
+  - payment
+```
+
+Restart after changes: `pm2 restart planning-engine`
+
+### Autonomy rules
+
+Edit `vault/Company_Handbook.md` to define what the agent can do without approval. Claude reads this file before every vault-operator session.
+
+### Poll intervals
+
+All processes default to 30 seconds. To change:
+
+- `approval-executor` and `planning-engine`: edit the `--interval` arg in `ecosystem.config.js`
+- `watcher-gmail`: edit `check_interval=30` in `watchers/gmail_watcher.py`
+- `watcher-linkedin`: edit `_CHECK_INTERVAL = 30` in `watchers/linkedin_watcher.py`
+
+Then restart: `pm2 restart all`
 
 ---
 
-## Autonomy Rules
+## Monitoring
 
-Defined in full in `vault/Company_Handbook.md`.
-
-| Action | Autonomous? |
-|--------|-------------|
-| Read vault, create plans, update Dashboard | ✅ Yes |
-| Move files within vault | ✅ Yes |
-| Send email / message / post | ❌ Needs approval |
-| Any financial action | ❌ Needs approval |
-| Contact new people | ❌ Needs approval |
-| Delete files | ❌ Needs approval |
-
----
-
-## Security Notes
-
-- **Never commit credentials.** Use `.env` (already in `.gitignore`) or your OS keychain.
-- **Sessions stay local.** WhatsApp and LinkedIn session data is excluded from git.
-- **Payments always need approval.** The handbook enforces this — do not relax it.
-- **Audit everything.** Every action is logged to `vault/Logs/YYYY-MM-DD.jsonl`. Retain 90 days minimum.
+```bash
+pm2 list                               # process status overview
+pm2 logs                               # tail all logs
+pm2 logs watcher-gmail                 # tail one process
+cat vault/Logs/$(date +%F).jsonl       # today's audit log (pretty-print with jq)
+```
 
 ---
 
 ## Troubleshooting
 
 | Problem | Fix |
-|---------|-----|
-| No files in Needs_Action | Check `pm2 logs watcher-gmail` / `watcher-whatsapp` |
-| Planning engine not running | `pm2 restart planning-engine` |
-| WhatsApp session expired | `WHATSAPP_HEADLESS=false python watchers/whatsapp_watcher.py ./vault` |
-| LinkedIn session expired | `python watchers/auth_linkedin.py` |
-| Gmail token expired | Run `python watchers/gmail_watcher.py ./vault` once to re-auth |
-| Approval not executing | Check `pm2 logs approval-executor`; verify file is in `vault/Approved/` not `Pending_Approval/` |
-| Playwright browser crash | `bash .claude/skills/browsing-with-playwright/scripts/stop-server.sh && bash ...start-server.sh` |
+|---|---|
+| Nothing appearing in Needs_Action | Check `pm2 logs watcher-gmail` — likely a credentials or token issue |
+| Approval file not being sent | Check the file has YAML frontmatter with `action:` and `status: approved` |
+| Gmail `invalid_scope` error | Delete `watchers/.state/gmail_token.json`, restart `watcher-gmail`, re-authorise |
+| LinkedIn session expired | Re-run `LINKEDIN_HEADLESS=false python watchers/auth_linkedin.py` |
+| LinkedIn post times out | Normal — the `networkidle` fix is already applied; if it still fails check `pm2 logs approval-executor` |
+| PM2 process keeps restarting | `pm2 logs <name>` to see the error; usually a missing env var or bad path in `.env` |
+
+---
+
+## Tech Stack
+
+- **[Claude Code](https://claude.ai/code)** — Reasoning engine and orchestrator
+- **[Obsidian](https://obsidian.md)** — Local-first vault as shared state and human GUI
+- **[Gmail API](https://developers.google.com/gmail/api)** — Email read + send (OAuth 2.0)
+- **[Playwright](https://playwright.dev)** — LinkedIn browser automation (persistent session)
+- **[PM2](https://pm2.keymetrics.io)** — Process manager (keep-alive, auto-restart, startup)
+- **Python 3.11+** — All watcher and orchestrator scripts
+- **Node.js v18+** — PM2 runtime
+
+---
+
+## Security
+
+- Never commit `.env` — it is already in `.gitignore`
+- Session data (`.sessions/`) is excluded from git
+- All outbound actions require human approval — nothing is sent autonomously
+- Every action is logged to `vault/Logs/YYYY-MM-DD.jsonl` for audit purposes
+
+---
+
+## License
+
+MIT
