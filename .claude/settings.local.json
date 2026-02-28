@@ -45,20 +45,11 @@
       "Bash(.venv/bin/python .claude/skills/approval-executor/scripts/execute.py --vault ./vault 2>&1)",
       "Bash(pm2 start watcher-gmail 2>&1 | tail -5)",
       "Bash(ls vault/Done/APPROVAL_SEND_LINKEDIN_POST*.md 2>&1)",
-      "Bash(SESSION_PATH=\"/home/metachemist/Code/full_time_employee/.sessions/linkedin\"\n.venv/bin/python .claude/skills/linkedin-poster/scripts/create_post.py \\\\\n  --content \"Test post from executor\" \\\\\n  --session-path \"$SESSION_PATH\" \\\\\n  --dry-run 2>&1)"
+      "Bash(SESSION_PATH=\"/home/metachemist/Code/full_time_employee/.sessions/linkedin\"\n.venv/bin/python .claude/skills/linkedin-poster/scripts/create_post.py \\\\\n  --content \"Test post from executor\" \\\\\n  --session-path \"$SESSION_PATH\" \\\\\n  --dry-run 2>&1)",
+      "Bash(ls vault/Done/APPROVAL_SEND_LINKEDIN_DM_self_test* 2>&1)",
+      "Bash(grep \"shehryar_test\" vault/Logs/*.jsonl | tail -1 | python3 -c \"import sys,json; l=sys.stdin.read\\(\\); print\\(json.dumps\\(json.loads\\(l.split\\(':',1\\)[1]\\), indent=2\\)\\)\")",
+      "Bash(ls -t /tmp/linkedin_dm_*.png | head -1)"
     ]
   },
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 .claude/hooks/ralph_wiggum.py"
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }
