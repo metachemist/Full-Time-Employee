@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19c856235b7760_2026-02-22.md",
+                "file": "Pending_Approval/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19ca4187e8_2026-02-28.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "PLAN_FILE_DROP_Unknown_EMAIL_19c856235b7760_2026-02-22"
+              "title": "APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19ca4187e8_2026-02-28"
             }
           }
         ]
@@ -180,10 +180,19 @@
       "bases:Create new base": false
     }
   },
-  "active": "b38d55245d4f3782",
+  "active": "1e1175780b419f39",
   "lastOpenFiles": [
-    "Untitled.canvas",
+    "Pending_Approval/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19c856235b_2026-02-22.md",
+    "Approved/APPROVAL_SEND_LINKEDIN_DM_Shehryar_Ahmed_LINKEDIN_LEAD_Sh_2026-02-22.md",
+    "Done/APPROVAL_SEND_LINKEDIN_DM_Shehryar_Ahmed_LINKEDIN_LEAD_Sh_2026-02-22.md",
+    "Done/APPROVAL_SEND_LINKEDIN_DM_Haiqa_Shahid_LINKEDIN_LEAD_Ha_2026-02-22.md",
+    "Done/APPROVAL_SEND_LINKEDIN_POST_test_2026-02-28_1772296528.md",
+    "Done/APPROVAL_SEND_LINKEDIN_POST_test_2026-02-28_1772296456.md",
+    "Approved/APPROVAL_SEND_LINKEDIN_POST_test_2026-02-28.md",
+    "Approved/APPROVAL_SEND_LINKEDIN_DM_Haiqa_Shahid_LINKEDIN_LEAD_Ha_2026-02-22.md",
+    "Pending_Approval/APPROVAL_SEND_LINKEDIN_DM_Haiqa_Shahid_LINKEDIN_LEAD_Ha_2026-02-22 1.md",
     "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19c856235b7760_2026-02-22.md",
+    "Untitled.canvas",
     "Logs/2026-02-20.json",
     "Plans/PLAN_review_testing_2_2026-02-20.md",
     "Done/PLAN_review_testing_2_2026-02-20.md",
@@ -201,8 +210,6 @@
     "Done/PLAN_review_test_file_2026-02-18.md",
     "Done/FILE_for_testing_purpose_2026-02-18_000000.md",
     "Plans/PLAN_review_test_file_2026-02-18.md",
-    "Needs_Action/FILE_for_testing_purpose_2026-02-18_000000.md",
-    "Dashboard.md",
-    "Inbox/for_testing_purpose.md"
+    "Needs_Action/FILE_for_testing_purpose_2026-02-18_000000.md"
   ]
 }

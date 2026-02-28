@@ -1,2 +1,0 @@
-{"timestamp": "2026-02-27T09:23:17.447416+00:00", "event": "item_processed", "source": "file_drop", "filename": "FILE_test_task_2026-02-27_142255.md", "plan": "PLAN_FILE_DROP_Unknown_FILE_test_task_2026-_2026-02-27.md", "approval": null, "priority": "low", "risk": "low", "result": "success"}
-{"timestamp": "2026-02-27T09:28:54.850304+00:00", "event": "dry_run", "action": "send_email", "file": "APPROVAL_SEND_EMAIL_Hafsa_Shahid_EMAIL_19c8628869_2026-02-22.md"}
