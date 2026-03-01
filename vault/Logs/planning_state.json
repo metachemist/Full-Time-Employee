@@ -19,6 +19,36 @@
       "timestamp": "2026-02-28T20:42:13.999178+00:00",
       "plan": "Plans/PLAN_LINKEDIN_Shehryar_Ahmed_LINKEDIN_LEAD_Shehry_2026-03-01.md",
       "approval": "Pending_Approval/APPROVAL_SEND_LINKEDIN_DM_Shehryar_Ahmed_LINKEDIN_LEAD_Sh_2026-03-01.md"
+    },
+    "EMAIL_19ca64131636b066.md": {
+      "timestamp": "2026-02-28T21:57:14.454688+00:00",
+      "plan": "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19ca64131636b0_2026-03-01.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19ca641316_2026-03-01.md"
+    },
+    "EMAIL_19ca74e45bda081d.md": {
+      "timestamp": "2026-03-01T05:40:11.036570+00:00",
+      "plan": "Plans/PLAN_GMAIL_Neon_EMAIL_19ca74e45bda08_2026-03-01.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_EMAIL_Neon_EMAIL_19ca74e45b_2026-03-01.md"
+    },
+    "LINKEDIN_LEAD_Vinodh_Kumar_20260301_150031.md": {
+      "timestamp": "2026-03-01T15:00:44.834575+00:00",
+      "plan": "Plans/PLAN_LINKEDIN_Vinodh_Kumar_LINKEDIN_LEAD_Vinodh_2026-03-01.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_LINKEDIN_DM_Vinodh_Kumar_LINKEDIN_LEAD_Vi_2026-03-01.md"
+    },
+    "LINKEDIN_LEAD_Vinodh_Kumar_20260301_150138.md": {
+      "timestamp": "2026-03-01T15:01:44.841364+00:00",
+      "plan": "Plans/PLAN_LINKEDIN_Vinodh_Kumar_LINKEDIN_LEAD_Vinodh_2026-03-01.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_LINKEDIN_DM_Vinodh_Kumar_LINKEDIN_LEAD_Vi_2026-03-01.md"
+    },
+    "LINKEDIN_LEAD_Vinodh_Kumar_20260301_151256.md": {
+      "timestamp": "2026-03-01T15:13:14.916232+00:00",
+      "plan": "Plans/PLAN_LINKEDIN_Vinodh_Kumar_LINKEDIN_LEAD_Vinodh_2026-03-01.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_LINKEDIN_DM_Vinodh_Kumar_LINKEDIN_LEAD_Vi_2026-03-01.md"
+    },
+    "FILE_WEEKLY_REVIEW_2026-03-01_2026-03-01_210001.md": {
+      "timestamp": "2026-03-01T16:00:15.292323+00:00",
+      "plan": "Plans/PLAN_FILE_DROP_Unknown_FILE_WEEKLY_REVIEW_2_2026-03-01.md",
+      "approval": null
     }
   }
 }

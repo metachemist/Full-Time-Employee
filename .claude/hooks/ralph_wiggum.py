@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
-Ralph Wiggum Stop Hook — AI Employee Silver Tier.
+Ralph Wiggum Stop Hook — AI Employee Gold Tier.
 
 Intercepts Claude Code's exit and re-injects the task prompt if there is
 still pending work in the vault. Named after Ralph Wiggum's persistence
 ("I'm Idaho!") — Claude keeps going until the job is done.
 
 Exit codes:
-  0  → allow Claude to stop (no pending work)
+  0  → allow Claude to stop (no pending work, or not in autonomous mode)
   2  → block stop, inject stdout as a new user message (work remains)
 
 Registered in .claude/settings.local.json under hooks.Stop.
 
-Claude Code will call this script before every exit attempt. If the script
-outputs a message and exits with code 2, Claude receives that message as a
-new user turn and continues working.
+AUTONOMOUS MODE: This hook only re-injects in autonomous mode.
+Autonomous mode is activated by the presence of a flag file:
+  .claude/hooks/.autonomous_mode
+
+Use scripts/autonomous.sh to invoke Claude in autonomous mode.
+Interactive sessions are never interrupted.
 """
 
 import json
@@ -25,8 +28,9 @@ from pathlib import Path
 # Locate vault relative to this hook's location
 # ---------------------------------------------------------------------------
 # .claude/hooks/ralph_wiggum.py → project root is two dirs up
-_PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
-_VAULT       = _PROJECT_DIR / "vault"
+_PROJECT_DIR   = Path(__file__).resolve().parent.parent.parent
+_VAULT         = _PROJECT_DIR / "vault"
+_AUTONOMOUS_FLAG = Path(__file__).resolve().parent / ".autonomous_mode"
 
 
 def _count_md(folder: Path) -> list[str]:
@@ -37,6 +41,10 @@ def _count_md(folder: Path) -> list[str]:
 
 
 def main() -> None:
+    # ── Only fire in autonomous mode ──────────────────────────────────────
+    if not _AUTONOMOUS_FLAG.exists():
+        sys.exit(0)
+
     needs_action = _count_md(_VAULT / "Needs_Action")
     approved     = _count_md(_VAULT / "Approved")
     rejected     = _count_md(_VAULT / "Rejected")
@@ -48,8 +56,9 @@ def main() -> None:
     except (json.JSONDecodeError, Exception):
         session = {}
 
-    # ── Nothing to do — let Claude stop ───────────────────────────────────
+    # ── Nothing to do — remove flag and let Claude stop ──────────────────
     if not needs_action and not approved:
+        _AUTONOMOUS_FLAG.unlink(missing_ok=True)
         sys.exit(0)
 
     # ── Build re-injection message ─────────────────────────────────────────

@@ -51,5 +51,16 @@
       "Bash(ls -t /tmp/linkedin_dm_*.png | head -1)"
     ]
   },
-  "hooks": {}
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/ralph_wiggum.py"
+          }
+        ]
+      }
+    ]
+  }
 }

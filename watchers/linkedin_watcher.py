@@ -56,7 +56,7 @@ except ImportError:
         "Run: pip install playwright && playwright install chromium"
     )
 
-from base_watcher import BaseWatcher
+from base_watcher import BaseWatcher, with_retry
 
 load_dotenv()
 
@@ -345,14 +345,11 @@ class LinkedInWatcher(BaseWatcher):
     # BaseWatcher interface
     # ------------------------------------------------------------------
 
+    @with_retry(max_attempts=3, base_delay=15.0, max_delay=120.0)
     def check_for_updates(self) -> list:
-        try:
-            items = self._scrape_all()
-            self.logger.debug(f"LinkedIn: {len(items)} new items.")
-            return items
-        except Exception as exc:
-            self.logger.error(f"LinkedIn scrape error: {exc}", exc_info=True)
-            return []
+        items = self._scrape_all()
+        self.logger.debug(f"LinkedIn: {len(items)} new items.")
+        return items
 
     def create_action_file(self, item: dict) -> Path:
         timestamp = datetime.now(timezone.utc)
