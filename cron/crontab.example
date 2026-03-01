@@ -1,4 +1,4 @@
-# AI Employee — Silver Tier Cron Schedule
+# AI Employee — Gold Tier Cron Schedule
 # ─────────────────────────────────────────────────────────────────────────────
 # Setup:
 #   1. Edit this file and replace /path/to/full_time_employee with the real path
@@ -30,18 +30,19 @@
 # [OPTIONAL] Run approval executor every 2 minutes (if NOT using PM2 loop)
 # */2 * * * * cd /path/to/full_time_employee && python .claude/skills/approval-executor/scripts/execute.py --vault ./vault >> logs/executor-cron.log 2>&1
 
-# ── Scheduled intelligence tasks ─────────────────────────────────────────────
+# ── Scheduled intelligence tasks (Ralph Wiggum autonomous mode) ──────────────
+#
+# These tasks write a trigger file into vault/Inbox/ and then invoke Claude
+# in autonomous mode so it processes the item through to Done/ without stopping.
 
-# Daily: Drop a briefing trigger into vault/Inbox at 8:00 AM (Mon-Fri)
-# This causes the filesystem watcher to create a Needs_Action item for Claude
-# to generate a morning briefing from vault state.
-0 8 * * 1-5 echo "Generate morning briefing from vault state. Summarise Pending_Approval count, Plans in progress, and recent Done items." > /path/to/full_time_employee/vault/Inbox/BRIEFING_$(date +\%Y-\%m-\%d).md
+# Daily: Morning briefing Mon-Fri at 8:00 AM
+0 8 * * 1-5 echo "Generate morning briefing from vault state. Summarise Pending_Approval count, Plans in progress, and recent Done items." > /path/to/full_time_employee/vault/Inbox/BRIEFING_$(date +\%Y-\%m-\%d).md && bash /path/to/full_time_employee/scripts/autonomous.sh >> /path/to/full_time_employee/logs/autonomous-cron.log 2>&1
 
-# Weekly: Sunday at 9:00 PM — trigger business review
-0 21 * * 0 echo "Generate weekly business review. Check Plans completed this week, items still in Pending_Approval, and suggest LinkedIn posts for the coming week." > /path/to/full_time_employee/vault/Inbox/WEEKLY_REVIEW_$(date +\%Y-\%m-\%d).md
+# Weekly: Sunday at 9:00 PM — business review
+0 21 * * 0 echo "Generate weekly business review. Check Plans completed this week, items still in Pending_Approval, and suggest LinkedIn posts for the coming week." > /path/to/full_time_employee/vault/Inbox/WEEKLY_REVIEW_$(date +\%Y-\%m-\%d).md && bash /path/to/full_time_employee/scripts/autonomous.sh >> /path/to/full_time_employee/logs/autonomous-cron.log 2>&1
 
-# Monthly: First day of month at 7:00 AM — subscription/cost audit trigger
-0 7 1 * * echo "Monthly audit: review vault/Logs/ for the past 30 days. Count total emails sent, WhatsApp messages sent, LinkedIn posts published. Note any failures or approvals that expired without action." > /path/to/full_time_employee/vault/Inbox/MONTHLY_AUDIT_$(date +\%Y-\%m-\%d).md
+# Monthly: First day of month at 7:00 AM — cost audit
+0 7 1 * * echo "Monthly audit: review vault/Logs/ for the past 30 days. Count total emails sent, LinkedIn posts published. Note any failures or approvals that expired without action." > /path/to/full_time_employee/vault/Inbox/MONTHLY_AUDIT_$(date +\%Y-\%m-\%d).md && bash /path/to/full_time_employee/scripts/autonomous.sh >> /path/to/full_time_employee/logs/autonomous-cron.log 2>&1
 
 # ── Log rotation ─────────────────────────────────────────────────────────────
 
