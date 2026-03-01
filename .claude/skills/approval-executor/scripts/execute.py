@@ -109,10 +109,12 @@ def _extract_message(body: str) -> str:
 _SKILLS_DIR = _PROJECT_DIR / ".claude" / "skills"
 
 _ACTION_SCRIPTS: dict[str, Path] = {
-    "send_email":                    _SKILLS_DIR / "gmail-sender"     / "scripts" / "send_email.py",
-    "send_linkedin_post":            _SKILLS_DIR / "linkedin-poster"  / "scripts" / "create_post.py",
-    "send_linkedin_dm":              _SKILLS_DIR / "linkedin-dm"      / "scripts" / "send_dm.py",
-    "send_twitter_post":             _SKILLS_DIR / "twitter-poster"   / "scripts" / "create_post.py",
+    "send_email":                    _SKILLS_DIR / "gmail-sender"      / "scripts" / "send_email.py",
+    "send_linkedin_post":            _SKILLS_DIR / "linkedin-poster"   / "scripts" / "create_post.py",
+    "send_linkedin_dm":              _SKILLS_DIR / "linkedin-dm"       / "scripts" / "send_dm.py",
+    "send_twitter_post":             _SKILLS_DIR / "twitter-poster"    / "scripts" / "create_post.py",
+    "send_facebook_post":            _SKILLS_DIR / "facebook-poster"   / "scripts" / "create_post.py",
+    "send_instagram_post":           _SKILLS_DIR / "instagram-poster"  / "scripts" / "create_post.py",
 }
 
 
@@ -154,6 +156,25 @@ def _build_args(action: str, body: str) -> list[str] | None:
             return None
         args = ["--content", message]
         session = os.environ.get("TWITTER_SESSION_PATH", "")
+        if session:
+            args += ["--session-path", session]
+        return args
+
+    if action == "send_facebook_post":
+        if not message:
+            return None
+        args = ["--content", message]
+        session = os.environ.get("FACEBOOK_SESSION_PATH", "")
+        if session:
+            args += ["--session-path", session]
+        return args
+
+    if action == "send_instagram_post":
+        # target field holds the image path; message is the caption
+        if not message or not target:
+            return None
+        args = ["--caption", message, "--image-path", target]
+        session = os.environ.get("INSTAGRAM_SESSION_PATH", "")
         if session:
             args += ["--session-path", session]
         return args
