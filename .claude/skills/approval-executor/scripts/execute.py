@@ -109,9 +109,10 @@ def _extract_message(body: str) -> str:
 _SKILLS_DIR = _PROJECT_DIR / ".claude" / "skills"
 
 _ACTION_SCRIPTS: dict[str, Path] = {
-    "send_email":                    _SKILLS_DIR / "gmail-sender"    / "scripts" / "send_email.py",
-    "send_linkedin_post":            _SKILLS_DIR / "linkedin-poster" / "scripts" / "create_post.py",
-    "send_linkedin_dm":              _SKILLS_DIR / "linkedin-dm"     / "scripts" / "send_dm.py",
+    "send_email":                    _SKILLS_DIR / "gmail-sender"     / "scripts" / "send_email.py",
+    "send_linkedin_post":            _SKILLS_DIR / "linkedin-poster"  / "scripts" / "create_post.py",
+    "send_linkedin_dm":              _SKILLS_DIR / "linkedin-dm"      / "scripts" / "send_dm.py",
+    "send_twitter_post":             _SKILLS_DIR / "twitter-poster"   / "scripts" / "create_post.py",
 }
 
 
@@ -144,6 +145,15 @@ def _build_args(action: str, body: str) -> list[str] | None:
             return None
         args = ["--to-profile", target, "--message", message]
         session = os.environ.get("LINKEDIN_SESSION_PATH", "")
+        if session:
+            args += ["--session-path", session]
+        return args
+
+    if action == "send_twitter_post":
+        if not message:
+            return None
+        args = ["--content", message]
+        session = os.environ.get("TWITTER_SESSION_PATH", "")
         if session:
             args += ["--session-path", session]
         return args
