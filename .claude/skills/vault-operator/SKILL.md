@@ -152,6 +152,34 @@ pm2 start watchers/filesystem_watcher.py --interpreter python3 -- vault
 pm2 save && pm2 startup
 ```
 
+## Typed Needs_Action Items
+
+Some items have a `type:` field in their YAML frontmatter that signals a specific action:
+
+### `type: briefing_request`
+Auto-approved — read-only. Run the CEO briefing generator:
+
+```bash
+python .claude/skills/ceo-briefing/scripts/generate_briefing.py \
+    --vault vault \
+    --scope <daily|weekly>
+```
+
+The `scope` value comes from the frontmatter `scope:` field.
+Output is written to `vault/Briefings/BRIEFING_<SCOPE>_<YYYY-MM-DD>.md`.
+Move the Needs_Action file to `Done/` when complete.
+
+### `type: file_drop`
+Generic file dropped in Inbox. Read the file, determine appropriate action.
+
+### `type: gmail_message`
+New Gmail message — decide reply, approval request, or no-op.
+
+### `type: linkedin_connection` / `type: linkedin_dm`
+New LinkedIn activity — plan outreach or follow-up.
+
+---
+
 ## Rules Summary (from Company_Handbook.md)
 
 | Action                        | Auto-approved? |
@@ -161,6 +189,7 @@ pm2 save && pm2 startup
 | Update Dashboard.md           | ✅ Yes          |
 | Append to Logs                | ✅ Yes          |
 | Move files within vault       | ✅ Yes          |
+| Generate CEO briefing         | ✅ Yes (read-only) |
 | Send email / message          | ❌ Needs approval |
 | Any financial action          | ❌ Needs approval |
 | Contact new people            | ❌ Needs approval |

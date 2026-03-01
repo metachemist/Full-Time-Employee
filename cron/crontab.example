@@ -35,8 +35,13 @@
 # These tasks write a trigger file into vault/Inbox/ and then invoke Claude
 # in autonomous mode so it processes the item through to Done/ without stopping.
 
-# Daily: Morning briefing Mon-Fri at 8:00 AM
-0 8 * * 1-5 echo "Generate morning briefing from vault state. Summarise Pending_Approval count, Plans in progress, and recent Done items." > /path/to/full_time_employee/vault/Inbox/BRIEFING_$(date +\%Y-\%m-\%d).md && bash /path/to/full_time_employee/scripts/autonomous.sh >> /path/to/full_time_employee/logs/autonomous-cron.log 2>&1
+# Daily CEO briefing Mon-Fri at 8:00 AM
+# Drops BRIEFING_DAILY_*.md into Inbox → filesystem_watcher creates a
+# briefing_request action → planning engine runs generate_briefing.py → Done
+0 8 * * 1-5 touch /path/to/full_time_employee/vault/Inbox/BRIEFING_DAILY_$(date +\%Y-\%m-\%d).md && bash /path/to/full_time_employee/scripts/autonomous.sh >> /path/to/full_time_employee/logs/autonomous-cron.log 2>&1
+
+# Weekly CEO briefing — Monday at 9:00 AM (covers prior 7 days)
+0 9 * * 1 touch /path/to/full_time_employee/vault/Inbox/BRIEFING_WEEKLY_$(date +\%Y-\%m-\%d).md && bash /path/to/full_time_employee/scripts/autonomous.sh >> /path/to/full_time_employee/logs/autonomous-cron.log 2>&1
 
 # Weekly: Sunday at 9:00 PM — business review
 0 21 * * 0 echo "Generate weekly business review. Check Plans completed this week, items still in Pending_Approval, and suggest LinkedIn posts for the coming week." > /path/to/full_time_employee/vault/Inbox/WEEKLY_REVIEW_$(date +\%Y-\%m-\%d).md && bash /path/to/full_time_employee/scripts/autonomous.sh >> /path/to/full_time_employee/logs/autonomous-cron.log 2>&1

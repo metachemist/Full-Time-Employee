@@ -65,6 +65,13 @@ class FileSystemWatcher(BaseWatcher):
     def create_action_file(self, file_path: Path) -> Path:
         """Build a Needs_Action .md file describing the dropped file."""
         timestamp = datetime.now()
+        name_upper = file_path.name.upper()
+
+        # ── Typed dispatch: BRIEFING_*.md ─────────────────────────────────────
+        if name_upper.startswith("BRIEFING_"):
+            return self._create_briefing_action(file_path, timestamp)
+
+        # ── Generic file-drop ─────────────────────────────────────────────────
         safe_stem = "".join(c if c.isalnum() or c in "-_" else "_" for c in file_path.stem)
         filename = f"FILE_{safe_stem}_{timestamp.strftime('%Y-%m-%d_%H%M%S')}.md"
         action_path = self.needs_action / filename
@@ -98,6 +105,58 @@ A new file has been dropped into the Inbox folder.
 - [ ] Move to /Done when complete
 """
         action_path.write_text(content, encoding="utf-8")
+        return action_path
+
+    def _create_briefing_action(self, file_path: Path, timestamp: datetime) -> Path:
+        """Create a typed briefing_request action from a BRIEFING_*.md inbox file."""
+        # Determine scope from filename: BRIEFING_DAILY_*.md or BRIEFING_WEEKLY_*.md
+        stem_upper = file_path.stem.upper()
+        if "WEEKLY" in stem_upper:
+            scope = "weekly"
+        else:
+            scope = "daily"
+
+        date_str = timestamp.strftime("%Y-%m-%d")
+        filename = f"BRIEFING_{scope.upper()}_{date_str}_{timestamp.strftime('%H%M%S')}.md"
+        action_path = self.needs_action / filename
+
+        content = f"""\
+---
+type: briefing_request
+scope: {scope}
+original_name: {file_path.name}
+received: {timestamp.isoformat()}
+status: pending
+---
+
+## CEO Briefing Requested
+
+A {scope} briefing has been triggered by cron.
+
+**Scope:** {scope} ({"last 24 hours" if scope == "daily" else "last 7 days"})
+**Triggered:** {timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+
+## Required Action
+
+Run the CEO briefing generator and write the output to `vault/Briefings/`:
+
+```bash
+python .claude/skills/ceo-briefing/scripts/generate_briefing.py \\
+    --vault vault \\
+    --scope {scope}
+```
+
+This is **auto-approved** (read-only — no external action). Move this file to `/Done` after the briefing is generated.
+"""
+        action_path.write_text(content, encoding="utf-8")
+        # Move the Inbox trigger to Done so it doesn't re-trigger
+        done_dir = self.vault_path / "Done"
+        done_dir.mkdir(parents=True, exist_ok=True)
+        dest = done_dir / f"INBOX_{file_path.name}"
+        try:
+            file_path.rename(dest)
+        except OSError:
+            pass  # Inbox file may have already been moved
         return action_path
 
     def run(self):
