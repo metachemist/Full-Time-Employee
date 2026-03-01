@@ -120,35 +120,47 @@ def create_post(
 
             page.wait_for_timeout(1000)
 
-            # ── Click Post / Tweet button ──────────────────────────────────
-            post_button_selectors = [
-                "button[data-testid='tweetButtonInline']",
-                "button[data-testid='tweetButton']",
-                "div[data-testid='tweetButtonInline']",
-            ]
+            # ── Wait for Post button to become enabled (content was typed) ─
+            # Button starts disabled when editor is empty; becomes enabled after typing.
+            # Use data-testid='tweetButton' (modal) as primary target.
             posted = False
-            for sel in post_button_selectors:
-                try:
-                    btn = page.locator(sel).first
-                    btn.wait_for(state="visible", timeout=5000)
-                    btn.click(timeout=5000)
-                    posted = True
-                    break
-                except (PlaywrightTimeout, Exception):
-                    continue
+            try:
+                page.wait_for_function(
+                    "document.querySelector(\"button[data-testid='tweetButton']\")?.disabled === false",
+                    timeout=5000,
+                )
+                page.locator("button[data-testid='tweetButton']").click(timeout=5000)
+                posted = True
+            except Exception:
+                pass
 
             if not posted:
-                # Fallback: keyboard shortcut Ctrl+Enter
+                # Fallback: tweetButtonInline (inline composer variant)
                 try:
-                    page.keyboard.press("Control+Return")
+                    page.wait_for_function(
+                        "document.querySelector(\"button[data-testid='tweetButtonInline']\")?.disabled === false",
+                        timeout=3000,
+                    )
+                    page.locator("button[data-testid='tweetButtonInline']").click(timeout=5000)
                     posted = True
                 except Exception:
                     pass
 
             if not posted:
+                # Final fallback: Ctrl+Enter keyboard shortcut
+                try:
+                    page.keyboard.press("Control+Return")
+                    page.wait_for_timeout(1000)
+                    posted = True
+                except Exception:
+                    pass
+
+            if not posted:
+                screenshot_path = f"/tmp/twitter_post_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                page.screenshot(path=screenshot_path)
                 return {
                     "status":    "error",
-                    "error":     "Could not find Post/Tweet button.",
+                    "error":     f"Could not click Post button. Screenshot: {screenshot_path}",
                     "timestamp": _ts(),
                 }
 
