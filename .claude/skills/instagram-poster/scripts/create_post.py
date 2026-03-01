@@ -50,13 +50,6 @@ def create_post(
             "timestamp": _ts(),
         }
 
-    if not image_path.exists():
-        return {
-            "status":    "error",
-            "error":     f"Image file not found: {image_path}",
-            "timestamp": _ts(),
-        }
-
     if dry_run:
         return {
             "status":       "dry_run",
@@ -64,6 +57,13 @@ def create_post(
             "image":        str(image_path),
             "preview":      caption[:120] + ("..." if len(caption) > 120 else ""),
             "timestamp":    _ts(),
+        }
+
+    if not image_path.exists():
+        return {
+            "status":    "error",
+            "error":     f"Image file not found: {image_path}",
+            "timestamp": _ts(),
         }
 
     if not session_path.exists():
