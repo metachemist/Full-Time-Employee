@@ -115,6 +115,9 @@ _ACTION_SCRIPTS: dict[str, Path] = {
     "send_twitter_post":             _SKILLS_DIR / "twitter-poster"    / "scripts" / "create_post.py",
     "send_facebook_post":            _SKILLS_DIR / "facebook-poster"   / "scripts" / "create_post.py",
     "send_instagram_post":           _SKILLS_DIR / "instagram-poster"  / "scripts" / "create_post.py",
+    "odoo_create_lead":              _SKILLS_DIR / "odoo-crm"          / "scripts" / "odoo_client.py",
+    "odoo_create_draft_invoice":     _SKILLS_DIR / "odoo-crm"          / "scripts" / "odoo_client.py",
+    "odoo_log_activity":             _SKILLS_DIR / "odoo-crm"          / "scripts" / "odoo_client.py",
 }
 
 
@@ -178,6 +181,47 @@ def _build_args(action: str, body: str) -> list[str] | None:
         if session:
             args += ["--session-path", session]
         return args
+
+    if action == "odoo_create_lead":
+        # Payload: Target = partner name, Message = description
+        # Optional Subject = lead title (falls back to partner name)
+        name = subject or target or "New Lead from AI Employee"
+        data = {"name": name}
+        if target:
+            data["partner_name"] = target
+        if message:
+            data["description"] = message
+        email_field = _extract_field(body, "Email")
+        if email_field:
+            data["email"] = email_field
+        return ["--operation", "create_lead", "--data", json.dumps(data)]
+
+    if action == "odoo_create_draft_invoice":
+        # Payload: Target = partner name, Message = JSON lines array or description
+        partner = target or ""
+        lines = []
+        try:
+            lines = json.loads(message) if message else []
+        except (json.JSONDecodeError, TypeError):
+            if message:
+                lines = [{"name": message, "price_unit": 0, "quantity": 1}]
+        data = {"partner_name": partner, "lines": lines}
+        return ["--operation", "create_draft_invoice", "--data", json.dumps(data)]
+
+    if action == "odoo_log_activity":
+        # Payload: Target = "model:record_id", Subject = summary, Message = note
+        model, _, record_id_str = (target or "crm.lead:0").partition(":")
+        try:
+            record_id = int(record_id_str)
+        except ValueError:
+            record_id = 0
+        data = {
+            "model":     model,
+            "record_id": record_id,
+            "summary":   subject or "AI Employee activity",
+            "note":      message or "",
+        }
+        return ["--operation", "log_activity", "--data", json.dumps(data)]
 
     return None
 
