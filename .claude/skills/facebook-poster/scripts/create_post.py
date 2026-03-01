@@ -137,7 +137,18 @@ def create_post(
                     "timestamp": _ts(),
                 }
 
-            page.wait_for_timeout(1000)
+            # ── Dismiss any autocomplete dropdowns (hashtags, mentions) ──
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(800)
+
+            # ── Click Next if present (Facebook multi-step flow) ──────────
+            try:
+                next_btn = page.locator("div[role='dialog'] div[aria-label='Next'], div[role='dialog'] button:has-text('Next'), div[role='dialog'] div[role='button']:has-text('Next')").first
+                if next_btn.is_visible(timeout=3000):
+                    next_btn.click()
+                    page.wait_for_timeout(1500)
+            except Exception:
+                pass
 
             # ── Click the Post button ─────────────────────────────────────
             posted = False

@@ -101,6 +101,9 @@ def create_post(
                 "svg[aria-label='New post']",
                 "[aria-label='New post']",
                 "a[aria-label='New post']",
+                # New Instagram UI: nav "Create" button
+                "a[role='link']:has-text('Create')",
+                "span:has-text('Create')",
             ]
             clicked = False
             for sel in create_selectors:
@@ -131,15 +134,35 @@ def create_post(
                     "timestamp": _ts(),
                 }
 
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(1500)
+
+            # ── If a sub-menu appeared, click "Post" from it ───────────────
+            try:
+                post_menu_item = page.locator("text='Post'").first
+                if post_menu_item.is_visible(timeout=2000):
+                    post_menu_item.click()
+                    page.wait_for_timeout(1500)
+            except Exception:
+                pass
 
             # ── Upload image via the file input ───────────────────────────
-            # Instagram's create flow shows a file picker dialog
+            # Try to find hidden file input directly (attached but not visible)
             file_input_sel = "input[type='file']"
+            file_input = page.locator(file_input_sel).first
             try:
-                page.wait_for_selector(file_input_sel, timeout=8000)
+                file_input.wait_for(state="attached", timeout=5000)
+            except Exception:
+                # File input not yet attached — click "Select from computer" to reveal it
+                try:
+                    page.click("button:has-text('Select from computer'), [role='button']:has-text('Select from computer')", timeout=5000)
+                    page.wait_for_timeout(1000)
+                except PlaywrightTimeout:
+                    pass
+
+            try:
+                file_input.wait_for(state="attached", timeout=8000)
                 page.set_input_files(file_input_sel, str(image_path.resolve()))
-            except PlaywrightTimeout:
+            except Exception:
                 screenshot_path = f"/tmp/instagram_post_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 page.screenshot(path=screenshot_path)
                 return {
@@ -191,22 +214,50 @@ def create_post(
                     "timestamp": _ts(),
                 }
 
-            page.wait_for_timeout(1000)
+            # ── Dismiss any hashtag/mention autocomplete ──────────────────
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(800)
 
-            # ── Click Share ───────────────────────────────────────────────
-            share_selectors = [
-                "button:has-text('Share')",
-                "div[role='button']:has-text('Share')",
-                "[aria-label='Share']",
-            ]
+            # ── Click Share (scoped to the create-post dialog header) ──────
+            # Instagram's "Share" is a plain text element in the top-right of
+            # the modal header — NOT a <button>. We scope strictly to the dialog
+            # and pick the element whose bounding box is in the top-right area.
             shared = False
-            for sel in share_selectors:
-                try:
-                    page.click(sel, timeout=5000)
-                    shared = True
-                    break
-                except PlaywrightTimeout:
-                    continue
+            try:
+                # Get all elements with exact text "Share" inside the dialog
+                share_els = page.locator("role=dialog >> text='Share'").all()
+                for el in share_els:
+                    box = el.bounding_box()
+                    if box and box["y"] < 200 and box["x"] > 600:
+                        el.click()
+                        shared = True
+                        break
+            except Exception:
+                pass
+
+            # Fallback: JS scoped to the modal header (first child with "Share")
+            if not shared:
+                shared = page.evaluate("""
+                    () => {
+                        const dialog = document.querySelector('[role=dialog]') ||
+                                       document.querySelector('[aria-label]');
+                        if (!dialog) return false;
+                        // Look in the top portion of the dialog only
+                        const rect = dialog.getBoundingClientRect();
+                        const all = [...dialog.querySelectorAll('*')];
+                        for (const el of all) {
+                            if (el.children.length > 0) continue;
+                            if (el.textContent.trim() !== 'Share') continue;
+                            const r = el.getBoundingClientRect();
+                            // Must be in the top 120px of the dialog and right-aligned
+                            if (r.top - rect.top < 120 && r.left > rect.left + rect.width / 2) {
+                                el.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                """)
 
             if not shared:
                 screenshot_path = f"/tmp/instagram_post_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
@@ -217,8 +268,26 @@ def create_post(
                     "timestamp": _ts(),
                 }
 
-            # ── Wait for upload and confirmation ──────────────────────────
-            page.wait_for_timeout(5000)
+            # ── Wait for upload to complete ────────────────────────────────
+            # Instagram shows a spinner while uploading; wait for the modal
+            # to disappear or for a success/confirmation indicator.
+            try:
+                # Wait up to 30s for the "Create new post" modal to close
+                page.wait_for_selector(
+                    "text='Your post has been shared.'",
+                    timeout=30_000,
+                )
+            except Exception:
+                # Not all Instagram versions show the toast — fallback: wait
+                # until the dialog with the share button is gone
+                try:
+                    page.wait_for_function(
+                        """() => !document.querySelector('[role=dialog]')""",
+                        timeout=30_000,
+                    )
+                except Exception:
+                    pass
+            page.wait_for_timeout(2000)
 
             screenshot_path = f"/tmp/instagram_post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             page.screenshot(path=screenshot_path)
