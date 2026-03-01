@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-Approval Executor — AI Employee Silver Tier skill script.
+Approval Executor — AI Employee Gold Tier skill script.
 
 Scans vault/Approved/ for pending APPROVAL_*.md files, parses each one,
 dispatches to the appropriate sender script, then moves to vault/Done/
 and writes the audit log.
 
 Usage:
-    python execute.py --vault ./vault             # execute all approvals
-    python execute.py --vault ./vault --dry-run   # preview without executing
+    python execute.py --vault ./vault               # execute all approvals
+    python execute.py --vault ./vault --dry-run     # preview without executing
     python execute.py --vault ./vault --once-file APPROVAL_SEND_EMAIL_...md
-    python execute.py --vault ./vault --loop      # daemon mode (PM2 / cron alternative)
+    python execute.py --vault ./vault --loop        # daemon mode (PM2 / cron alternative)
     python execute.py --vault ./vault --loop --interval 60
+    python execute.py --vault ./vault --retry-failed  # move Failed/ back to Approved/ for retry
 """
 
 import argparse
@@ -170,6 +171,7 @@ def execute_approval(
     approval_file: Path,
     vault: Path,
     dry_run: bool = False,
+    failed_dir: Path | None = None,
 ) -> dict:
     text = approval_file.read_text(encoding="utf-8")
     fm, body = _parse_approval(text)
@@ -225,6 +227,9 @@ def execute_approval(
         return {"status": "skipped", "reason": msg, "file": approval_file.name}
 
     # ── Execute ──────────────────────────────────────────────────────────
+    _failed_dir = failed_dir or (vault / "Failed")
+    _failed_dir.mkdir(parents=True, exist_ok=True)
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         output_raw = result.stdout.strip()
@@ -235,38 +240,64 @@ def execute_approval(
 
         success = result.returncode == 0 and output.get("status") not in ("error", "failed")
         new_status = output.get("status", "sent" if success else "failed")
+        stderr_snippet = result.stderr.strip()[:400] if result.stderr else ""
 
         # ── Update approval file ──────────────────────────────────────────
         updated_text = re.sub(r"^status:\s*.+$", f"status: {new_status}", text, flags=re.MULTILINE)
         updated_text += f"\n<!-- executed_at: {_ts()} -->\n"
+        if not success and stderr_snippet:
+            updated_text += f"<!-- error: {stderr_snippet[:200]} -->\n"
         approval_file.write_text(updated_text, encoding="utf-8")
 
-        # ── Move to Done ──────────────────────────────────────────────────
-        done_dest = vault / "Done" / approval_file.name
-        if done_dest.exists():
-            done_dest = done_dest.with_name(f"{done_dest.stem}_{int(datetime.now().timestamp())}.md")
-        approval_file.rename(done_dest)
+        # ── Route: success → Done/, failure → Failed/ ─────────────────────
+        if success:
+            dest_dir = vault / "Done"
+        else:
+            dest_dir = _failed_dir
+
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / approval_file.name
+        if dest.exists():
+            dest = dest.with_name(f"{dest.stem}_{int(datetime.now().timestamp())}.md")
+        approval_file.rename(dest)
 
         # ── Audit ─────────────────────────────────────────────────────────
         _audit(vault, "action_executed", action=action, file=approval_file.name,
                result="success" if success else "error",
-               output=output, returncode=result.returncode)
+               output=output, returncode=result.returncode,
+               stderr=stderr_snippet or None,
+               destination="Done" if success else "Failed")
 
         status_icon = "✓" if success else "✗"
-        print(f"  {status_icon} {new_status.upper()}")
-        if not success and result.stderr:
-            print(f"  stderr: {result.stderr[:200]}")
+        print(f"  {status_icon} {new_status.upper()}", end="")
+        if not success:
+            print(f" → vault/Failed/{dest.name}")
+            if stderr_snippet:
+                print(f"  stderr: {stderr_snippet[:200]}")
+        else:
+            print()
 
         return {
             "status": "success" if success else "error",
             "action": action,
             "file":   approval_file.name,
             "result": output,
+            "destination": "Done" if success else "Failed",
         }
 
     except subprocess.TimeoutExpired:
-        _audit(vault, "action_timeout", action=action, file=approval_file.name)
+        # Move timed-out file to Failed/
+        updated_text = re.sub(r"^status:\s*.+$", "status: timeout", text, flags=re.MULTILINE)
+        updated_text += f"\n<!-- executed_at: {_ts()} -->\n<!-- error: timed out after 120s -->\n"
+        approval_file.write_text(updated_text, encoding="utf-8")
+        dest = _failed_dir / approval_file.name
+        if dest.exists():
+            dest = dest.with_name(f"{dest.stem}_{int(datetime.now().timestamp())}.md")
+        approval_file.rename(dest)
+        _audit(vault, "action_timeout", action=action, file=approval_file.name, destination="Failed")
+        print(f"  ✗ TIMEOUT → vault/Failed/{dest.name}")
         return {"status": "error", "reason": "Script timed out after 120 s.", "file": approval_file.name}
+
     except Exception as exc:
         _audit(vault, "action_error", action=action, file=approval_file.name, error=str(exc))
         return {"status": "error", "reason": str(exc), "file": approval_file.name}
@@ -276,8 +307,33 @@ def execute_approval(
 # Main
 # ---------------------------------------------------------------------------
 
+def _retry_failed(vault: Path, failed_dir: Path, approved_dir: Path) -> int:
+    """Move all files from vault/Failed/ back to vault/Approved/ for retry."""
+    files = list(failed_dir.glob("APPROVAL_*.md"))
+    if not files:
+        print("No failed approvals to retry.")
+        return 0
+
+    print(f"Moving {len(files)} failed approval(s) back to Approved/ for retry…")
+    for f in files:
+        # Reset status to 'approved' in frontmatter before re-queuing
+        text = f.read_text(encoding="utf-8")
+        text = re.sub(r"^status:\s*.+$", "status: approved", text, flags=re.MULTILINE)
+        # Strip old executed_at / error comments
+        text = re.sub(r"\n<!-- (executed_at|error):.*?-->\n", "\n", text)
+        dest = approved_dir / f.name
+        if dest.exists():
+            dest = dest.with_name(f"{dest.stem}_{int(datetime.now().timestamp())}.md")
+        f.write_text(text, encoding="utf-8")
+        f.rename(dest)
+        print(f"  ↩ {f.name} → Approved/")
+    return 0
+
+
 def _run_once(vault: Path, approved_dir: Path, dry_run: bool, once_file: str | None) -> int:
     """Process one batch of approvals. Returns exit code (0=ok, 1=errors)."""
+    failed_dir = vault / "Failed"
+
     if once_file:
         files = [approved_dir / once_file]
         if not files[0].exists():
@@ -293,7 +349,7 @@ def _run_once(vault: Path, approved_dir: Path, dry_run: bool, once_file: str | N
 
     results = []
     for f in files:
-        r = execute_approval(f, vault, dry_run=dry_run)
+        r = execute_approval(f, vault, dry_run=dry_run, failed_dir=failed_dir)
         results.append(r)
 
     success = sum(1 for r in results if r["status"] in ("success", "dry_run"))
@@ -302,6 +358,9 @@ def _run_once(vault: Path, approved_dir: Path, dry_run: bool, once_file: str | N
 
     print(f"\n── Summary ──────────────────────────────────")
     print(f"  Processed: {success}  |  Errors: {errors}  |  Skipped: {skipped}")
+    if errors:
+        print(f"  Failed files moved to: vault/Failed/")
+        print(f"  To retry: python execute.py --vault {vault} --retry-failed")
     return 0 if errors == 0 else 1
 
 
@@ -319,6 +378,8 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--loop", action="store_true",
                       help="Run continuously, polling every --interval seconds (PM2 mode)")
+    mode.add_argument("--retry-failed", action="store_true",
+                      help="Move all files from vault/Failed/ back to Approved/ for retry")
     parser.add_argument("--interval", type=int, default=30,
                         metavar="SECS",
                         help="Poll interval in seconds for --loop mode (default: 30)")
@@ -326,7 +387,12 @@ def main() -> None:
 
     vault        = Path(args.vault).expanduser().resolve()
     approved_dir = vault / "Approved"
+    failed_dir   = vault / "Failed"
     approved_dir.mkdir(parents=True, exist_ok=True)
+    failed_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.retry_failed:
+        sys.exit(_retry_failed(vault, failed_dir, approved_dir))
 
     if args.loop:
         import logging
@@ -349,6 +415,7 @@ def main() -> None:
                 break
             except Exception as exc:
                 log.error(f"Unhandled error: {exc}", exc_info=True)
+                _audit(vault, "executor_error", error=str(exc))
             time.sleep(args.interval)
     else:
         if not list(approved_dir.glob("APPROVAL_*.md")) and not args.once_file:

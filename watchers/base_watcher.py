@@ -11,6 +11,7 @@ import json
 import time
 import logging
 import logging.handlers
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -165,6 +166,28 @@ class BaseWatcher(ABC):
         return item_id in self.processed_ids
 
     # ------------------------------------------------------------------
+    # Audit logging — writes JSONL entries to vault/Logs/<date>.jsonl
+    # ------------------------------------------------------------------
+
+    def _write_audit(self, event: str, **kwargs) -> None:
+        """Append a structured audit event to vault/Logs/<today>.jsonl."""
+        try:
+            now = datetime.now(timezone.utc)
+            log_dir = self.vault_path / "Logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / now.strftime("%Y-%m-%d.jsonl")
+            entry = {
+                "timestamp": now.isoformat(),
+                "source": self.__class__.__name__,
+                "event": event,
+                **kwargs,
+            }
+            with log_file.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except Exception as exc:
+            self.logger.error(f"Failed to write audit log: {exc}")
+
+    # ------------------------------------------------------------------
     # Abstract interface
     # ------------------------------------------------------------------
 
@@ -185,6 +208,7 @@ class BaseWatcher(ABC):
         self.logger.info(
             f"Starting {self.__class__.__name__} (interval={self.check_interval}s)"
         )
+        self._write_audit("watcher_started", interval=self.check_interval)
         while True:
             try:
                 items = self.check_for_updates()
@@ -192,15 +216,27 @@ class BaseWatcher(ABC):
                     try:
                         path = self.create_action_file(item)
                         self.logger.info(f"Created action file: {path.name}")
+                        self._write_audit(
+                            "item_created",
+                            file=path.name,
+                            item_id=item.get("id") if isinstance(item, dict) else None,
+                        )
                     except Exception as exc:
                         self.logger.error(
                             f"Failed to create action file for {item!r}: {exc}",
                             exc_info=True,
                         )
+                        self._write_audit(
+                            "item_create_error",
+                            error=str(exc),
+                            item=str(item)[:200],
+                        )
                 time.sleep(self.check_interval)
             except KeyboardInterrupt:
                 self.logger.info("Shutdown requested — exiting cleanly.")
+                self._write_audit("watcher_stopped", reason="KeyboardInterrupt")
                 break
             except Exception as exc:
                 self.logger.error(f"Unhandled error in run loop: {exc}", exc_info=True)
+                self._write_audit("watcher_error", error=str(exc))
                 time.sleep(self.check_interval)
