@@ -1,0 +1,17 @@
+{"timestamp": "2026-03-01T20:19:17.223303+00:00", "event": "item_processed", "source": "file_drop", "filename": "EMAIL_19cab0da7fcf3b5c.md", "plan": "PLAN_FILE_DROP_Unknown_EMAIL_19cab0da7fcf3b_2026-03-02.md", "approval": "APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19cab0da7f_2026-03-02.md", "priority": "low", "risk": "low", "result": "success"}
+{"timestamp": "2026-03-02T02:24:23.873296+00:00", "source": "LinkedInWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-02T02:24:26.752738+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-02T09:01:02.115827+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-02T09:01:02.123216+00:00", "source": "LinkedInWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-02T09:01:07.770776+00:00", "source": "LinkedInWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-02T09:01:11.311609+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-02T12:56:00.308818+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-02T12:56:00.322647+00:00", "source": "LinkedInWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-02T12:56:05.555872+00:00", "source": "LinkedInWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-02T12:56:09.120176+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-02T15:09:26.783451+00:00", "source": "LinkedInWatcher", "event": "item_created", "file": "LINKEDIN_LEAD_Taha_Siraj_20260302_150926.md", "item_id": "433f2c63b14103ed"}
+{"timestamp": "2026-03-02T15:09:50.329316+00:00", "event": "item_processed", "source": "linkedin", "filename": "LINKEDIN_LEAD_Taha_Siraj_20260302_150926.md", "plan": "PLAN_LINKEDIN_Taha_Siraj_LINKEDIN_LEAD_Taha_S_2026-03-02.md", "approval": "APPROVAL_SEND_LINKEDIN_DM_Taha_Siraj_LINKEDIN_LEAD_Ta_2026-03-02.md", "priority": "high", "risk": "low", "result": "success"}
+{"timestamp": "2026-03-02T18:30:56.313531+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-02T18:30:56.317628+00:00", "source": "LinkedInWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-02T23:50:29.832456+00:00", "source": "LinkedInWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-02T23:50:32.652730+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}

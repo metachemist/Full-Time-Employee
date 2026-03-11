@@ -2,44 +2,121 @@
 """
 Instagram Poster — AI Employee Gold Tier skill script.
 
-Publishes a photo post with caption to Instagram using a persistent
-Playwright session. Must only be called after human approval via vault/Approved/.
+Publishes a photo post with caption to Instagram using the official
+Content Publishing API (no browser required).
 
-Instagram requires an image — text-only posts are not supported on the web.
+Requirements:
+    - Instagram Business or Creator account linked to a Facebook Page
+    - Image must be at a publicly accessible HTTPS URL
+
+Setup:
+    Add to .env:
+        INSTAGRAM_USER_ID=123456789          # IG Business Account ID
+        INSTAGRAM_ACCESS_TOKEN=EAAxxxxx      # Page or user token with instagram_content_publish
+        # Optional: auto-derived from FACEBOOK_ACCESS_TOKEN + FACEBOOK_PAGE_ID if absent:
+        # FACEBOOK_ACCESS_TOKEN=EAAxxxxx
+        # FACEBOOK_PAGE_ID=123456789
 
 Usage:
-    python create_post.py --caption "Caption..." --image-path /path/to/image.jpg --session-path ~/.sessions/instagram
-    python create_post.py --caption "Caption..." --image-path /path/to/image.jpg --dry-run
+    python create_post.py --caption "Caption..." --image-url "https://example.com/image.jpg"
+    python create_post.py --caption "Caption..." --image-url "https://..." --dry-run
 """
 
 import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+    import requests
 except ImportError:
-    sys.exit("Missing dependency. Run:  pip install playwright && playwright install chromium")
+    sys.exit("Missing dependency. Run:  pip install requests")
 
-_DEFAULT_SESSION = Path(os.environ.get("INSTAGRAM_SESSION_PATH", "~/.sessions/instagram")).expanduser()
-_HOME_URL        = "https://www.instagram.com/"
-_MAX_CAPTION_LEN = 2200  # Instagram caption character limit
+try:
+    from dotenv import load_dotenv
+    _PROJECT_DIR = Path(__file__).resolve().parents[4]
+    load_dotenv(_PROJECT_DIR / ".env")
+except ImportError:
+    pass
+
+_GRAPH_API_VERSION = "v21.0"
+_GRAPH_API_BASE    = f"https://graph.facebook.com/{_GRAPH_API_VERSION}"
+_MAX_CAPTION_LEN   = 2200
+_PUBLISH_TIMEOUT_S = 90   # max seconds to wait for media container to be ready
 
 
 def _ts() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def create_post(
-    caption: str,
-    image_path: Path,
-    session_path: Path,
-    headless: bool = True,
-    dry_run: bool = False,
-) -> dict:
+def _get_credentials() -> tuple[str, str]:
+    """
+    Returns (instagram_user_id, access_token).
+    Priority 1: INSTAGRAM_USER_ID + INSTAGRAM_ACCESS_TOKEN (direct).
+    Priority 2: Derive IG User ID from FACEBOOK_PAGE_ID via graph API.
+    """
+    ig_user_id   = os.environ.get("INSTAGRAM_USER_ID", "").strip()
+    access_token = (
+        os.environ.get("INSTAGRAM_ACCESS_TOKEN", "").strip()
+        or os.environ.get("FACEBOOK_PAGE_ACCESS_TOKEN", "").strip()
+        or os.environ.get("FACEBOOK_ACCESS_TOKEN", "").strip()
+    )
+
+    if ig_user_id and access_token:
+        return ig_user_id, access_token
+
+    if not access_token:
+        return "", ""
+
+    # Auto-derive IG User ID from the Facebook Page
+    page_id = os.environ.get("FACEBOOK_PAGE_ID", "").strip()
+    if not page_id:
+        return "", ""
+
+    resp = requests.get(
+        f"{_GRAPH_API_BASE}/{page_id}",
+        params={"fields": "instagram_business_account", "access_token": access_token},
+        timeout=15,
+    )
+    if resp.status_code == 200:
+        ig_account = resp.json().get("instagram_business_account", {})
+        ig_user_id = ig_account.get("id", "")
+
+    return ig_user_id, access_token
+
+
+def _resolve_image_url(url: str) -> str:
+    """Follow redirects and return the final URL (Instagram API requires direct links)."""
+    try:
+        resp = requests.head(url, allow_redirects=True, timeout=10)
+        return resp.url
+    except Exception:
+        return url  # fall back to original if HEAD fails
+
+
+def _wait_for_container(creation_id: str, access_token: str) -> bool:
+    """Poll until the media container status is FINISHED or timeout."""
+    deadline = time.time() + _PUBLISH_TIMEOUT_S
+    while time.time() < deadline:
+        resp = requests.get(
+            f"{_GRAPH_API_BASE}/{creation_id}",
+            params={"fields": "status_code", "access_token": access_token},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            status = resp.json().get("status_code", "")
+            if status == "FINISHED":
+                return True
+            if status == "ERROR":
+                return False
+        time.sleep(4)
+    return False
+
+
+def create_post(caption: str, image_url: str, dry_run: bool = False) -> dict:
     if not caption.strip():
         return {"status": "error", "error": "Caption is empty.", "timestamp": _ts()}
 
@@ -50,290 +127,119 @@ def create_post(
             "timestamp": _ts(),
         }
 
+    if not image_url.startswith("https://"):
+        return {
+            "status":    "error",
+            "error":     "image_url must be a public HTTPS URL (Instagram API requirement).",
+            "timestamp": _ts(),
+        }
+
     if dry_run:
         return {
-            "status":       "dry_run",
-            "caption_len":  len(caption),
-            "image":        str(image_path),
-            "preview":      caption[:120] + ("..." if len(caption) > 120 else ""),
-            "timestamp":    _ts(),
+            "status":      "dry_run",
+            "caption_len": len(caption),
+            "image_url":   image_url,
+            "preview":     caption[:120] + ("..." if len(caption) > 120 else ""),
+            "timestamp":   _ts(),
         }
 
-    if not image_path.exists():
+    ig_user_id, access_token = _get_credentials()
+    if not ig_user_id or not access_token:
         return {
             "status":    "error",
-            "error":     f"Image file not found: {image_path}",
+            "error":     (
+                "Missing Instagram credentials. Set INSTAGRAM_USER_ID + INSTAGRAM_ACCESS_TOKEN "
+                "in .env (or FACEBOOK_PAGE_ID + FACEBOOK_ACCESS_TOKEN for auto-detection). "
+                "See SKILL.md for setup."
+            ),
             "timestamp": _ts(),
         }
 
-    if not session_path.exists():
-        return {
-            "status":    "error",
-            "error":     f"Instagram session not found: {session_path}. Run: python watchers/auth_instagram.py",
-            "timestamp": _ts(),
-        }
+    # Resolve any redirects — Instagram API requires a direct (non-redirect) URL
+    image_url = _resolve_image_url(image_url)
 
-    with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(
-            str(session_path),
-            headless=headless,
-            args=["--disable-blink-features=AutomationControlled"],
-            viewport={"width": 1280, "height": 900},
+    # Step 1: Create media container
+    try:
+        resp = requests.post(
+            f"{_GRAPH_API_BASE}/{ig_user_id}/media",
+            data={
+                "image_url":    image_url,
+                "caption":      caption,
+                "access_token": access_token,
+            },
+            timeout=30,
         )
-        page = context.pages[0] if context.pages else context.new_page()
+    except requests.RequestException as exc:
+        return {"status": "error", "error": f"Network error (create container): {exc}", "timestamp": _ts()}
 
+    if resp.status_code not in (200, 201):
         try:
-            # ── Navigate to home ──────────────────────────────────────────
-            page.goto(_HOME_URL, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_timeout(2000)
+            err = resp.json().get("error", {})
+        except Exception:
+            err = {"message": resp.text}
+        error_msg = err.get("message", "Unknown error")
+        if resp.status_code == 401:
+            error_msg += " — Token expired. Re-run watchers/auth_facebook.py or refresh INSTAGRAM_ACCESS_TOKEN."
+        return {"status": "error", "error": error_msg, "http_status": resp.status_code, "timestamp": _ts()}
 
-            # ── Check login ───────────────────────────────────────────────
-            if "login" in page.url or "accounts" in page.url:
-                return {
-                    "status":    "error",
-                    "error":     "Instagram session expired. Run: python watchers/auth_instagram.py",
-                    "timestamp": _ts(),
-                }
+    creation_id = resp.json().get("id", "")
+    if not creation_id:
+        return {"status": "error", "error": "No creation_id returned from /media endpoint.", "timestamp": _ts()}
 
-            # ── Click the Create / New Post button ────────────────────────
-            create_selectors = [
-                "a[href='/create/select/']",
-                "svg[aria-label='New post']",
-                "[aria-label='New post']",
-                "a[aria-label='New post']",
-                # New Instagram UI: nav "Create" button
-                "a[role='link']:has-text('Create')",
-                "span:has-text('Create')",
-            ]
-            clicked = False
-            for sel in create_selectors:
-                try:
-                    page.click(sel, timeout=5000)
-                    clicked = True
-                    break
-                except PlaywrightTimeout:
-                    continue
+    # Step 2: Wait for container to be ready
+    if not _wait_for_container(creation_id, access_token):
+        return {
+            "status":    "error",
+            "error":     f"Media container {creation_id} did not reach FINISHED state within {_PUBLISH_TIMEOUT_S}s.",
+            "timestamp": _ts(),
+        }
 
-            if not clicked:
-                # Try clicking via JS — Instagram's nav icons are SVG-heavy
-                clicked = page.evaluate("""
-                    () => {
-                        const links = [...document.querySelectorAll('a')];
-                        const create = links.find(a => a.href && a.href.includes('/create/'));
-                        if (create) { create.click(); return true; }
-                        return false;
-                    }
-                """)
+    # Step 3: Publish
+    try:
+        resp = requests.post(
+            f"{_GRAPH_API_BASE}/{ig_user_id}/media_publish",
+            data={"creation_id": creation_id, "access_token": access_token},
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        return {"status": "error", "error": f"Network error (publish): {exc}", "timestamp": _ts()}
 
-            if not clicked:
-                screenshot_path = f"/tmp/instagram_post_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                page.screenshot(path=screenshot_path)
-                return {
-                    "status":    "error",
-                    "error":     f"Could not find Create button. Screenshot: {screenshot_path}",
-                    "timestamp": _ts(),
-                }
+    if resp.status_code not in (200, 201):
+        try:
+            err = resp.json().get("error", {})
+        except Exception:
+            err = {"message": resp.text}
+        return {
+            "status":     "error",
+            "error":      err.get("message", "Unknown error"),
+            "http_status": resp.status_code,
+            "timestamp":  _ts(),
+        }
 
-            page.wait_for_timeout(1500)
+    post_id  = resp.json().get("id", "")
+    post_url = f"https://www.instagram.com/p/{post_id}/" if post_id else "https://www.instagram.com/"
 
-            # ── If a sub-menu appeared, click "Post" from it ───────────────
-            try:
-                post_menu_item = page.locator("text='Post'").first
-                if post_menu_item.is_visible(timeout=2000):
-                    post_menu_item.click()
-                    page.wait_for_timeout(1500)
-            except Exception:
-                pass
-
-            # ── Upload image via the file input ───────────────────────────
-            # Try to find hidden file input directly (attached but not visible)
-            file_input_sel = "input[type='file']"
-            file_input = page.locator(file_input_sel).first
-            try:
-                file_input.wait_for(state="attached", timeout=5000)
-            except Exception:
-                # File input not yet attached — click "Select from computer" to reveal it
-                try:
-                    page.click("button:has-text('Select from computer'), [role='button']:has-text('Select from computer')", timeout=5000)
-                    page.wait_for_timeout(1000)
-                except PlaywrightTimeout:
-                    pass
-
-            try:
-                file_input.wait_for(state="attached", timeout=8000)
-                page.set_input_files(file_input_sel, str(image_path.resolve()))
-            except Exception:
-                screenshot_path = f"/tmp/instagram_post_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                page.screenshot(path=screenshot_path)
-                return {
-                    "status":    "error",
-                    "error":     f"File input not found. Screenshot: {screenshot_path}",
-                    "timestamp": _ts(),
-                }
-
-            page.wait_for_timeout(2000)
-
-            # ── Click Next through crop and filter steps ──────────────────
-            for step_label in ("Next", "Next"):
-                next_selectors = [
-                    "button:has-text('Next')",
-                    "[aria-label='Next']",
-                    "div[role='button']:has-text('Next')",
-                ]
-                for sel in next_selectors:
-                    try:
-                        page.click(sel, timeout=5000)
-                        break
-                    except PlaywrightTimeout:
-                        continue
-                page.wait_for_timeout(1500)
-
-            # ── Type caption ──────────────────────────────────────────────
-            caption_selectors = [
-                "div[aria-label='Write a caption...']",
-                "textarea[aria-label*='caption']",
-                "div[role='textbox'][aria-label*='caption']",
-                "div[contenteditable='true']",
-            ]
-            typed = False
-            for sel in caption_selectors:
-                try:
-                    page.click(sel, timeout=5000)
-                    page.keyboard.type(caption, delay=20)
-                    typed = True
-                    break
-                except PlaywrightTimeout:
-                    continue
-
-            if not typed:
-                screenshot_path = f"/tmp/instagram_post_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                page.screenshot(path=screenshot_path)
-                return {
-                    "status":    "error",
-                    "error":     f"Could not find caption field. Screenshot: {screenshot_path}",
-                    "timestamp": _ts(),
-                }
-
-            # ── Dismiss any hashtag/mention autocomplete ──────────────────
-            page.keyboard.press("Escape")
-            page.wait_for_timeout(800)
-
-            # ── Click Share (scoped to the create-post dialog header) ──────
-            # Instagram's "Share" is a plain text element in the top-right of
-            # the modal header — NOT a <button>. We scope strictly to the dialog
-            # and pick the element whose bounding box is in the top-right area.
-            shared = False
-            try:
-                # Get all elements with exact text "Share" inside the dialog
-                share_els = page.locator("role=dialog >> text='Share'").all()
-                for el in share_els:
-                    box = el.bounding_box()
-                    if box and box["y"] < 200 and box["x"] > 600:
-                        el.click()
-                        shared = True
-                        break
-            except Exception:
-                pass
-
-            # Fallback: JS scoped to the modal header (first child with "Share")
-            if not shared:
-                shared = page.evaluate("""
-                    () => {
-                        const dialog = document.querySelector('[role=dialog]') ||
-                                       document.querySelector('[aria-label]');
-                        if (!dialog) return false;
-                        // Look in the top portion of the dialog only
-                        const rect = dialog.getBoundingClientRect();
-                        const all = [...dialog.querySelectorAll('*')];
-                        for (const el of all) {
-                            if (el.children.length > 0) continue;
-                            if (el.textContent.trim() !== 'Share') continue;
-                            const r = el.getBoundingClientRect();
-                            // Must be in the top 120px of the dialog and right-aligned
-                            if (r.top - rect.top < 120 && r.left > rect.left + rect.width / 2) {
-                                el.click();
-                                return true;
-                            }
-                        }
-                        return false;
-                    }
-                """)
-
-            if not shared:
-                screenshot_path = f"/tmp/instagram_post_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                page.screenshot(path=screenshot_path)
-                return {
-                    "status":    "error",
-                    "error":     f"Could not click Share button. Screenshot: {screenshot_path}",
-                    "timestamp": _ts(),
-                }
-
-            # ── Wait for upload to complete ────────────────────────────────
-            # Instagram shows a spinner while uploading; wait for the modal
-            # to disappear or for a success/confirmation indicator.
-            try:
-                # Wait up to 30s for the "Create new post" modal to close
-                page.wait_for_selector(
-                    "text='Your post has been shared.'",
-                    timeout=30_000,
-                )
-            except Exception:
-                # Not all Instagram versions show the toast — fallback: wait
-                # until the dialog with the share button is gone
-                try:
-                    page.wait_for_function(
-                        """() => !document.querySelector('[role=dialog]')""",
-                        timeout=30_000,
-                    )
-                except Exception:
-                    pass
-            page.wait_for_timeout(2000)
-
-            screenshot_path = f"/tmp/instagram_post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            page.screenshot(path=screenshot_path)
-
-            return {
-                "status":          "posted",
-                "profile_url":     _HOME_URL,
-                "screenshot":      screenshot_path,
-                "caption_preview": caption[:80] + ("..." if len(caption) > 80 else ""),
-                "image":           str(image_path),
-                "timestamp":       _ts(),
-            }
-
-        except PlaywrightTimeout as exc:
-            return {"status": "error", "error": f"Timeout: {exc}", "timestamp": _ts()}
-        except Exception as exc:
-            return {"status": "error", "error": str(exc), "timestamp": _ts()}
-        finally:
-            context.close()
+    return {
+        "status":          "posted",
+        "post_id":         post_id,
+        "url":             post_url,
+        "image_url":       image_url,
+        "caption_preview": caption[:80] + ("..." if len(caption) > 80 else ""),
+        "timestamp":       _ts(),
+    }
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Instagram Poster — AI Employee Gold Tier action script."
-    )
-    parser.add_argument("--caption",      required=True, help="Post caption (max 2200 chars)")
-    parser.add_argument("--image-path",   required=True, help="Path to image file (JPG/PNG)")
-    parser.add_argument(
-        "--session-path",
-        default=str(_DEFAULT_SESSION),
-        help=f"Path to Instagram Playwright session (default: {_DEFAULT_SESSION})",
-    )
-    parser.add_argument("--headless",    action="store_true", default=True)
-    parser.add_argument("--no-headless", dest="headless", action="store_false")
-    parser.add_argument("--dry-run",     action="store_true")
+    parser = argparse.ArgumentParser(description="Instagram Poster — Content Publishing API action script.")
+    parser.add_argument("--caption",    required=True, help="Post caption (max 2200 chars)")
+    parser.add_argument("--image-url",  required=True, help="Public HTTPS URL of the image to post")
+    parser.add_argument("--dry-run",    action="store_true", help="Preview without posting")
     args = parser.parse_args()
 
-    image_path   = Path(args.image_path).expanduser().resolve()
-    session_path = Path(args.session_path).expanduser().resolve()
-
     result = create_post(
-        caption      = args.caption,
-        image_path   = image_path,
-        session_path = session_path,
-        headless     = args.headless,
-        dry_run      = args.dry_run,
+        caption   = args.caption,
+        image_url = args.image_url,
+        dry_run   = args.dry_run,
     )
     print(json.dumps(result, indent=2))
     sys.exit(0 if result["status"] in ("posted", "dry_run") else 1)

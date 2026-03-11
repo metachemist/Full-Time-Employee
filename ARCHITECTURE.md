@@ -16,7 +16,6 @@ External Sources
   Watchers (Python)
   ─────────────────────────────────────────
   gmail_watcher.py          polls Gmail API every 2 min
-  linkedin_watcher.py       polls LinkedIn via Playwright every 5 min
   filesystem_watcher.py     event-driven (watchdog) on vault/Inbox/
          │
          ▼ writes .md files
@@ -98,7 +97,6 @@ vault/
 |---------|---------|---------|
 | `filesystem_watcher.py` | New file in `vault/Inbox/` | `FILE_*` or `BRIEFING_*` action |
 | `gmail_watcher.py` | New Gmail (unread) | `EMAIL_*` action |
-| `linkedin_watcher.py` | New connection/DM | `LINKEDIN_LEAD_*` action |
 
 Typed dispatch in `filesystem_watcher.py`:
 - `BRIEFING_*.md` → `type: briefing_request` (auto-approved)
@@ -184,7 +182,6 @@ The Stop hook (`.claude/hooks/ralph_wiggum.py`) intercepts Claude's exit:
 ecosystem.config.js
 ├── watcher-filesystem       vault/Inbox/ → Needs_Action
 ├── watcher-gmail            Gmail API → Needs_Action
-├── watcher-linkedin         LinkedIn → Needs_Action
 ├── approval-executor        vault/Approved/ → actions → Done
 └── planning-engine          vault/Needs_Action/ → Plans + Approvals
 ```

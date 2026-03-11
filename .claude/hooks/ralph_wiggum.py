@@ -43,6 +43,7 @@ def _count_md(folder: Path) -> list[str]:
 def main() -> None:
     # ── Only fire in autonomous mode ──────────────────────────────────────
     if not _AUTONOMOUS_FLAG.exists():
+        sys.stderr.write("Ralph Wiggum: idle (not in autonomous mode)\n")
         sys.exit(0)
 
     needs_action = _count_md(_VAULT / "Needs_Action")

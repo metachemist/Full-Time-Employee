@@ -23,6 +23,11 @@ try:
 except ImportError:
     sys.exit("Missing dependency: playwright\nRun: pip install playwright && playwright install chromium")
 
+try:
+    from playwright_stealth import stealth_sync
+except ImportError:
+    stealth_sync = None
+
 load_dotenv()
 
 
@@ -76,6 +81,8 @@ def main() -> None:
         )
 
         page = context.pages[0] if context.pages else context.new_page()
+        if stealth_sync:
+            stealth_sync(page)
         page.goto("https://x.com/login", wait_until="domcontentloaded", timeout=30_000)
 
         logged_in = False
@@ -83,13 +90,11 @@ def main() -> None:
             try:
                 current_url = page.url
                 if "x.com/home" in current_url:
-                    # Feed loaded — give it 3 seconds to finish writing cookies
                     page.wait_for_timeout(3_000)
                     logged_in = True
                     break
                 page.wait_for_timeout(2_000)
             except Exception:
-                # Browser was closed by user
                 break
 
         try:

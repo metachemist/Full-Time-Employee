@@ -14,6 +14,7 @@ Usage:
 import argparse
 import json
 import os
+import random
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,11 @@ try:
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 except ImportError:
     sys.exit("Missing dependency. Run:  pip install playwright && playwright install chromium")
+
+try:
+    from playwright_stealth import stealth_sync
+except ImportError:
+    stealth_sync = None
 
 _DEFAULT_SESSION = Path(os.environ.get("TWITTER_SESSION_PATH", "~/.sessions/twitter")).expanduser()
 _COMPOSE_URL     = "https://x.com/compose/tweet"
@@ -68,15 +74,17 @@ def create_post(
         context = p.chromium.launch_persistent_context(
             str(session_path),
             headless=headless,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            args=["--disable-blink-features=AutomationControlled"],
             viewport={"width": 1280, "height": 800},
         )
         page = context.pages[0] if context.pages else context.new_page()
+        if stealth_sync:
+            stealth_sync(page)
 
         try:
-            # ── Navigate to home first to check login state ───────────────
+            # ── Navigate to home and check login state ────────────────────
             page.goto(_HOME_URL, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(3000)
 
             if any(kw in page.url for kw in ("login", "signin", "i/flow")):
                 return {
@@ -85,29 +93,56 @@ def create_post(
                     "timestamp": _ts(),
                 }
 
-            # ── Navigate directly to compose URL ──────────────────────────
-            # x.com/compose/tweet is the most reliable compose entry point
-            page.goto(_COMPOSE_URL, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_timeout(2000)
+            # ── Human-like browsing simulation before posting ─────────────
+            # Scroll down and back up, move mouse, pause — mimics a real user
+            # reading their feed before composing a post.
+            for _ in range(random.randint(3, 5)):
+                scroll_by = random.randint(200, 500)
+                page.evaluate(f"window.scrollBy(0, {scroll_by})")
+                page.wait_for_timeout(random.randint(800, 1800))
 
-            # ── Find and click the tweet text area ────────────────────────
-            editor_selectors = [
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(random.randint(1000, 2000))
+
+            # Random mouse movement across the feed
+            for _ in range(random.randint(2, 4)):
+                x = random.randint(300, 800)
+                y = random.randint(200, 600)
+                page.mouse.move(x, y)
+                page.wait_for_timeout(random.randint(300, 700))
+
+            # ── Use inline home-feed composer (less detectable than /compose/tweet) ──
+            # Click the "What's happening?" placeholder on the home feed
+            inline_selectors = [
                 "div[data-testid='tweetTextarea_0']",
+                "div[aria-label='Post text']",
                 "div[data-testid='tweetTextarea_0_label']",
-                "div[role='textbox'][aria-label*='tweet']",
-                "div[role='textbox'][aria-label*='Tweet']",
                 "div[role='textbox'][aria-label*='Post']",
-                "div.public-DraftEditor-content",
+                "div[role='textbox'][aria-label*='Tweet']",
+                "div[role='textbox'][aria-label*='tweet']",
             ]
             typed = False
-            for sel in editor_selectors:
+            for sel in inline_selectors:
                 try:
                     page.click(sel, timeout=5000)
-                    page.keyboard.type(content, delay=30)
+                    page.wait_for_timeout(1000)
+                    page.keyboard.type(content, delay=50)
                     typed = True
                     break
                 except PlaywrightTimeout:
                     continue
+
+            if not typed:
+                # Fallback: click "Post" button in left sidebar to open modal
+                try:
+                    page.click("a[data-testid='SideNav_NewTweet_Button']", timeout=5000)
+                    page.wait_for_timeout(1500)
+                    page.click("div[data-testid='tweetTextarea_0']", timeout=5000)
+                    page.wait_for_timeout(500)
+                    page.keyboard.type(content, delay=50)
+                    typed = True
+                except PlaywrightTimeout:
+                    pass
 
             if not typed:
                 screenshot_path = f"/tmp/twitter_post_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
@@ -118,39 +153,36 @@ def create_post(
                     "timestamp": _ts(),
                 }
 
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(1500)
 
-            # ── Wait for Post button to become enabled (content was typed) ─
-            # Button starts disabled when editor is empty; becomes enabled after typing.
-            # Use data-testid='tweetButton' (modal) as primary target.
+            # ── Wait for Post button to become enabled, then use keyboard ──
+            # X detects programmatic button clicks as automation — Ctrl+Enter
+            # is the safest submission method.
             posted = False
             try:
                 page.wait_for_function(
-                    "document.querySelector(\"button[data-testid='tweetButton']\")?.disabled === false",
-                    timeout=5000,
+                    "document.querySelector(\"button[data-testid='tweetButton']\")?.disabled === false"
+                    " || document.querySelector(\"button[data-testid='tweetButtonInline']\")?.disabled === false",
+                    timeout=6000,
                 )
-                page.locator("button[data-testid='tweetButton']").click(timeout=5000)
+            except Exception:
+                pass
+
+            try:
+                page.keyboard.press("Control+Return")
+                page.wait_for_timeout(2000)
                 posted = True
             except Exception:
                 pass
 
             if not posted:
-                # Fallback: tweetButtonInline (inline composer variant)
+                # Fallback: JS click to bypass automation detection
                 try:
-                    page.wait_for_function(
-                        "document.querySelector(\"button[data-testid='tweetButtonInline']\")?.disabled === false",
-                        timeout=3000,
+                    page.evaluate(
+                        "document.querySelector(\"button[data-testid='tweetButton']\")?.click()"
+                        " || document.querySelector(\"button[data-testid='tweetButtonInline']\")?.click()"
                     )
-                    page.locator("button[data-testid='tweetButtonInline']").click(timeout=5000)
-                    posted = True
-                except Exception:
-                    pass
-
-            if not posted:
-                # Final fallback: Ctrl+Enter keyboard shortcut
-                try:
-                    page.keyboard.press("Control+Return")
-                    page.wait_for_timeout(1000)
+                    page.wait_for_timeout(2000)
                     posted = True
                 except Exception:
                     pass
@@ -166,20 +198,17 @@ def create_post(
 
             # ── Wait for post to complete ──────────────────────────────────
             page.wait_for_timeout(3000)
-
-            # Confirm: should navigate away from compose URL on success
             success = "compose" not in page.url
 
-            # ── Screenshot for audit ──────────────────────────────────────
             screenshot_path = f"/tmp/twitter_post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             page.screenshot(path=screenshot_path)
 
             if not success:
                 return {
-                    "status":    "error",
-                    "error":     "Post may not have submitted — still on compose page.",
+                    "status":     "error",
+                    "error":      "Post may not have submitted — still on compose page.",
                     "screenshot": screenshot_path,
-                    "timestamp": _ts(),
+                    "timestamp":  _ts(),
                 }
 
             return {
@@ -200,7 +229,7 @@ def create_post(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Twitter/X Poster — AI Employee Gold Tier action script."
+        description="Twitter/X Poster — Playwright session-based action script."
     )
     parser.add_argument("--content",      help="Tweet text (max 280 chars)")
     parser.add_argument("--content-file", help="Path to file containing tweet text")
@@ -209,12 +238,10 @@ def main() -> None:
         default=str(_DEFAULT_SESSION),
         help=f"Path to Twitter/X Playwright session (default: {_DEFAULT_SESSION})",
     )
-    parser.add_argument("--headless",    action="store_true", default=True,
-                        help="Run headless (default: True)")
+    parser.add_argument("--headless",    action="store_true", default=True)
     parser.add_argument("--no-headless", dest="headless", action="store_false",
                         help="Show browser window")
-    parser.add_argument("--dry-run",     action="store_true",
-                        help="Preview without posting")
+    parser.add_argument("--dry-run",     action="store_true", help="Preview without posting")
     args = parser.parse_args()
 
     content = args.content or ""

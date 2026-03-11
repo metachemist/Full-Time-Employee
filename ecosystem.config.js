@@ -1,5 +1,5 @@
 /**
- * PM2 Ecosystem Config — AI Employee Silver Tier Watchers
+ * PM2 Ecosystem Config — AI Employee Watchers
  *
  * Prerequisites:
  *   npm install -g pm2
@@ -62,28 +62,6 @@ module.exports = {
       },
       log_file:    path.resolve(__dirname, "logs", "pm2-gmail.log"),
       error_file:  path.resolve(__dirname, "logs", "pm2-gmail-error.log"),
-      merge_logs:  true,
-    },
-
-    // ── LinkedIn Watcher ───────────────────────────────────────────────────
-    {
-      name:        "watcher-linkedin",
-      script:      path.join(WATCHERS_DIR, "linkedin_watcher.py"),
-      interpreter: "python3",
-      args:        VAULT_PATH,
-      cwd:         WATCHERS_DIR,
-      watch:       false,
-      autorestart: true,
-      max_restarts: 9999,
-      min_uptime: "10s",
-      exp_backoff_restart_delay: 100,
-      env_file:    path.resolve(__dirname, ".env"),
-      env: {
-        PYTHONUNBUFFERED: "1",
-        LINKEDIN_HEADLESS: "true",
-      },
-      log_file:    path.resolve(__dirname, "logs", "pm2-linkedin.log"),
-      error_file:  path.resolve(__dirname, "logs", "pm2-linkedin-error.log"),
       merge_logs:  true,
     },
 

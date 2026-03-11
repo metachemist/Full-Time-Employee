@@ -20,3 +20,6 @@
 {"timestamp": "2026-03-01T16:21:34.286582+00:00", "source": "CeoBriefingGenerator", "event": "briefing_generated", "scope": "daily", "output_file": "/home/metachemist/Code/full_time_employee/vault/Briefings/BRIEFING_DAILY_2026-03-01.md", "word_count": 279, "counts": {"needs_action": 2, "plans": 8, "pending_approval": 3, "approved": 0, "done": 15, "failed": 0, "rejected": 3}}
 {"timestamp": "2026-03-01T17:24:37.032686+00:00", "event": "dry_run", "action": "odoo_create_lead", "file": "test_odoo_approval.md"}
 {"timestamp": "2026-03-01T17:24:53.737858+00:00", "event": "dry_run", "action": "odoo_create_lead", "file": "test_odoo_approval.md"}
+{"timestamp": "2026-03-01T20:19:12.730551+00:00", "source": "GmailWatcher", "event": "item_created", "file": "EMAIL_19cab0da7fcf3b5c.md", "item_id": "19cab0da7fcf3b5c"}
+{"timestamp": "2026-03-01T20:35:18.941516+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-01T20:35:18.941443+00:00", "source": "LinkedInWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}

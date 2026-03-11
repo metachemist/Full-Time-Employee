@@ -1,0 +1,3 @@
+{"timestamp": "2026-03-11T01:04:43.483501+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-11T06:47:53.700444+00:00", "source": "GmailWatcher", "event": "item_created", "file": "EMAIL_19cdba6c0572fcd5.md", "item_id": "19cdba6c0572fcd5"}
+{"timestamp": "2026-03-11T06:48:19.127626+00:00", "event": "item_processed", "source": "gmail", "filename": "EMAIL_19cdba6c0572fcd5.md", "plan": "PLAN_GMAIL_Facebook_EMAIL_19cdba6c0572fc_2026-03-11.md", "approval": "APPROVAL_SEND_EMAIL_Facebook_EMAIL_19cdba6c05_2026-03-11.md", "priority": "high", "risk": "low", "result": "success"}
