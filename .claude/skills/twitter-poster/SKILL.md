@@ -1,15 +1,16 @@
 ---
 name: twitter-poster
 description: |
-  Create and publish posts (tweets) to Twitter/X using a persistent Playwright
-  session. Use when asked to post on X/Twitter, or when processing an approved
-  APPROVAL_SEND_TWITTER_POST_*.md file from vault/Approved/.
-  Always draft first and require human approval before posting.
+  Create and publish posts (tweets) to Twitter/X using the official X API v2
+  (OAuth 1.0a — no browser required). Use when asked to post on X/Twitter,
+  or when processing an approved APPROVAL_SEND_TWITTER_POST_*.md file from
+  vault/Approved/. Always draft first and require human approval before posting.
 ---
 
 # Twitter/X Poster
 
-Publish posts to Twitter/X for business visibility and audience growth.
+Publish posts to Twitter/X for business visibility and audience growth using
+the official X API v2.
 
 ## When to Use
 
@@ -19,20 +20,26 @@ Publish posts to Twitter/X for business visibility and audience growth.
 
 **Never post directly** — always route through `vault/Pending_Approval/` first.
 
-## Session Setup (one-time)
+## API Setup (one-time)
 
-Add to your `.env`:
-```
-TWITTER_SESSION_PATH=/home/you/.sessions/twitter
-```
+1. Go to [developer.twitter.com](https://developer.twitter.com/en/portal/projects-and-apps)
+2. Create a Project + App (or use an existing one)
+3. Under **App Settings → User authentication settings**:
+   - Enable OAuth 1.0a
+   - Set App Permissions to **Read and Write**
+4. Under **Keys and Tokens**:
+   - Copy **API Key** and **API Key Secret**
+   - Generate **Access Token** and **Access Token Secret** (make sure you generate them **after** setting Write permissions)
+5. Add to `.env`:
+   ```
+   X_API_KEY=xxxxx
+   X_API_SECRET=xxxxx
+   X_ACCESS_TOKEN=xxxxx
+   X_ACCESS_TOKEN_SECRET=xxxxx
+   ```
 
-Then authenticate:
-```bash
-cd watchers && python auth_twitter.py
-```
-
-Log in with your X email + password (NOT "Continue with Google" — Google OAuth
-is blocked by Playwright's automation detection).
+**Note:** Access tokens generated before setting Write permissions will be read-only.
+Regenerate them if you get 403 errors.
 
 ## Character Limit
 
@@ -95,13 +102,18 @@ Once the approval file is moved to `vault/Approved/`, the executor runs:
 
 ```bash
 python .claude/skills/twitter-poster/scripts/create_post.py \
-  --content "Your tweet text..." \
-  --session-path ~/.sessions/twitter
+  --content "Your tweet text..."
 ```
 
 Expected output:
 ```json
-{"status": "posted", "screenshot": "/tmp/twitter_post_20260301_080000.png", "timestamp": "..."}
+{
+  "status": "posted",
+  "tweet_id": "1234567890123456789",
+  "tweet_url": "https://x.com/i/web/status/1234567890123456789",
+  "content_preview": "Your tweet text...",
+  "timestamp": "2026-03-08T12:00:00+00:00"
+}
 ```
 
 ### 3. Update the Vault
@@ -114,17 +126,24 @@ After successful post:
 
 ## Dry-Run Mode
 
-Preview without opening a browser:
+Preview without making any API call:
 ```bash
 python .claude/skills/twitter-poster/scripts/create_post.py \
   --content "Tweet text..." --dry-run
 ```
+
+## Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| 401 Unauthorized | Check all 4 credentials in .env are correct |
+| 403 Forbidden | Regenerate Access Token **after** setting Write permissions |
+| Content too long | Reduce to ≤280 characters |
 
 ## Rules (non-negotiable)
 
 - **Never** post without a file in `vault/Approved/`
 - **Max 280 characters** — executor rejects longer content
 - **Max 3-5 posts per day** — avoid spam flags
-- **Always** screenshot the published post for the audit log
 - **Never** post competitor mentions, personal information, or pricing without explicit approval
 - **Always** log every post attempt to `vault/Logs/`

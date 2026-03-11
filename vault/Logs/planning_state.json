@@ -49,6 +49,41 @@
       "timestamp": "2026-03-01T16:00:15.292323+00:00",
       "plan": "Plans/PLAN_FILE_DROP_Unknown_FILE_WEEKLY_REVIEW_2_2026-03-01.md",
       "approval": null
+    },
+    "EMAIL_19cab0da7fcf3b5c.md": {
+      "timestamp": "2026-03-01T20:19:17.150177+00:00",
+      "plan": "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19cab0da7fcf3b_2026-03-02.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19cab0da7f_2026-03-02.md"
+    },
+    "LINKEDIN_LEAD_Taha_Siraj_20260302_150926.md": {
+      "timestamp": "2026-03-02T15:09:50.318147+00:00",
+      "plan": "Plans/PLAN_LINKEDIN_Taha_Siraj_LINKEDIN_LEAD_Taha_S_2026-03-02.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_LINKEDIN_DM_Taha_Siraj_LINKEDIN_LEAD_Ta_2026-03-02.md"
+    },
+    "EMAIL_19cc750c5cc937cf.md": {
+      "timestamp": "2026-03-07T08:01:50.599879+00:00",
+      "plan": "Plans/PLAN_GMAIL_Facebook_EMAIL_19cc750c5cc937_2026-03-07.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_EMAIL_Facebook_EMAIL_19cc750c5c_2026-03-07.md"
+    },
+    "EMAIL_19cc7deaac1e575b.md": {
+      "timestamp": "2026-03-07T10:37:22.258313+00:00",
+      "plan": "Plans/PLAN_GMAIL_Facebook_EMAIL_19cc7deaac1e57_2026-03-07.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_EMAIL_Facebook_EMAIL_19cc7deaac_2026-03-07.md"
+    },
+    "EMAIL_19cc87e2104696d4.md": {
+      "timestamp": "2026-03-07T14:27:35.365822+00:00",
+      "plan": "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19cc87e2104696_2026-03-07.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19cc87e210_2026-03-07.md"
+    },
+    "FILE_WEEKLY_REVIEW_2026-03-08_2026-03-08_210001.md": {
+      "timestamp": "2026-03-08T16:00:12.319916+00:00",
+      "plan": "Plans/PLAN_FILE_DROP_Unknown_FILE_WEEKLY_REVIEW_2_2026-03-08.md",
+      "approval": null
+    },
+    "EMAIL_19cdba6c0572fcd5.md": {
+      "timestamp": "2026-03-11T06:48:19.124224+00:00",
+      "plan": "Plans/PLAN_GMAIL_Facebook_EMAIL_19cdba6c0572fc_2026-03-11.md",
+      "approval": "Pending_Approval/APPROVAL_SEND_EMAIL_Facebook_EMAIL_19cdba6c05_2026-03-11.md"
     }
   }
 }

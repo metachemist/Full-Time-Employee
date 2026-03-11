@@ -28,7 +28,7 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-    _PROJECT_DIR = Path(__file__).resolve().parents[3]
+    _PROJECT_DIR = Path(__file__).resolve().parents[4]
     load_dotenv(_PROJECT_DIR / ".env")
 except ImportError:
     pass  # dotenv optional — env vars may be set directly
@@ -115,7 +115,7 @@ class OdooClient:
         # Find activity type id
         type_ids = self.execute(
             "mail.activity.type", "search",
-            [[["name", "ilike", activity_type]]],
+            [["name", "ilike", activity_type]],
             limit=1,
         )
         activity_type_id = type_ids[0] if type_ids else False
@@ -147,7 +147,7 @@ class OdooClient:
         """
         # Resolve partner
         partner_ids = self.execute("res.partner", "search",
-                                   [[["name", "ilike", partner_name]]], limit=1)
+                                   [["name", "ilike", partner_name]], limit=1)
         partner_id = partner_ids[0] if partner_ids else False
 
         invoice_lines = []
@@ -205,7 +205,7 @@ class OdooClient:
         draft_count = len(draft_ids)
 
         # CRM pipeline
-        lead_count = self.execute("crm.lead", "search_count", [[["active", "=", True]]])
+        lead_count = self.execute("crm.lead", "search_count", [["active", "=", True]])
 
         return {
             "open_invoices_count":    len(open_invoices),

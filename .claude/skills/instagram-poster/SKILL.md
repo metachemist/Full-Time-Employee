@@ -1,16 +1,16 @@
 ---
 name: instagram-poster
 description: |
-  Create and publish photo posts with captions to Instagram using a persistent
-  Playwright session. Use when asked to post on Instagram, or when processing
-  an approved APPROVAL_SEND_INSTAGRAM_POST_*.md file from vault/Approved/.
+  Create and publish photo posts with captions to Instagram using the official
+  Content Publishing API (no browser required). Use when asked to post on Instagram,
+  or when processing an approved APPROVAL_SEND_INSTAGRAM_POST_*.md file from vault/Approved/.
   Always draft first and require human approval before posting.
-  NOTE: Instagram requires an image — text-only posts are not supported on web.
+  NOTE: Instagram requires a publicly accessible HTTPS image URL — local file paths are not supported by the API.
 ---
 
 # Instagram Poster
 
-Publish photo posts to Instagram for business visibility and brand building.
+Publish photo posts to Instagram using the official Content Publishing API (no Playwright required).
 
 ## When to Use
 
@@ -19,23 +19,46 @@ Publish photo posts to Instagram for business visibility and brand building.
 
 **Never post directly** — always route through `vault/Pending_Approval/` first.
 
-## Important: Image Required
+## Important: Public HTTPS Image URL Required
 
-Instagram's web interface requires an image/video for every post.
-The approval file must include an `Image:` field with a valid local file path.
+The Instagram Content Publishing API does **not accept local file paths**. The image must be at a publicly accessible HTTPS URL (e.g., hosted on S3, Cloudflare Images, Imgur, or any CDN).
 
-Supported formats: JPG, PNG, MP4
+- Upload your image to a public host first
+- Paste the URL into the approval file `Target:` field
 
-## Session Setup (one-time)
+## One-Time Setup
 
-Add to your `.env`:
+### 1. Requirements
+
+- An **Instagram Business** or **Creator** account linked to a Facebook Page
+- A Facebook Developer App with these permissions approved:
+  - `pages_show_list` — to auto-derive the page access token
+  - `pages_manage_posts` — for page token validity
+  - `instagram_basic` — to look up the IG Business Account ID from the page
+  - `instagram_content_publish` — to create and publish posts
+
+### 2. Add credentials to `.env`
+
 ```
-INSTAGRAM_SESSION_PATH=/home/you/.sessions/instagram
+FACEBOOK_APP_ID=xxxxx
+FACEBOOK_APP_SECRET=xxxxx
+FACEBOOK_ACCESS_TOKEN=EAAxxxxx    # user token with instagram_content_publish scope
+FACEBOOK_PAGE_ID=123456789        # your Facebook Page ID
 ```
 
-Then authenticate:
+The script **auto-detects** `INSTAGRAM_USER_ID` from your page on first run.
+
+To pin it (faster, avoids one API call):
+```
+INSTAGRAM_USER_ID=123456789
+INSTAGRAM_ACCESS_TOKEN=EAAxxxxx   # defaults to FACEBOOK_PAGE_ACCESS_TOKEN if absent
+```
+
+### 3. Find your Instagram User ID (optional)
+
 ```bash
-cd watchers && python auth_instagram.py
+curl "https://graph.facebook.com/v21.0/{PAGE_ID}?fields=instagram_business_account&access_token={TOKEN}"
+# Returns: {"instagram_business_account": {"id": "YOUR_IG_USER_ID"}, ...}
 ```
 
 ## Approval File Format
@@ -53,7 +76,7 @@ The following post will be published to Instagram.
 
 # Payload
 
-- **Image:** /path/to/image.jpg
+- **Target:** https://yourdomain.com/images/post.jpg
 
 ## Message / Content
 
@@ -62,10 +85,37 @@ The following post will be published to Instagram.
   #hashtag1 #hashtag2 #hashtag3
 ```
 
+`Target:` = public HTTPS image URL
+`## Message / Content` = caption text
+
 Save to `vault/Approved/APPROVAL_SEND_INSTAGRAM_POST_<topic>_<YYYY-MM-DD>.md`
 
-The executor reads the `Image:` field as the `target` and the `## Message / Content`
-section as the caption.
+## Dry-Run Mode
+
+```bash
+python .claude/skills/instagram-poster/scripts/create_post.py \
+  --caption "Caption text..." \
+  --image-url "https://example.com/image.jpg" \
+  --dry-run
+```
+
+Expected output:
+```json
+{"status": "dry_run", "caption_len": 42, "image_url": "https://...", "preview": "...", "timestamp": "..."}
+```
+
+## Live Post
+
+```bash
+python .claude/skills/instagram-poster/scripts/create_post.py \
+  --caption "Caption text..." \
+  --image-url "https://example.com/image.jpg"
+```
+
+Expected output:
+```json
+{"status": "posted", "post_id": "...", "url": "https://www.instagram.com/p/.../", "timestamp": "..."}
+```
 
 ## Caption Best Practices
 
@@ -74,19 +124,15 @@ section as the caption.
 - Max 2,200 characters
 - Emojis encouraged for engagement
 
-## Dry-Run Mode
+## API Flow (internal)
 
-```bash
-python .claude/skills/instagram-poster/scripts/create_post.py \
-  --caption "Caption text..." \
-  --image-path /path/to/image.jpg \
-  --dry-run
-```
+1. `POST /{ig-user-id}/media` — creates a media container with `image_url` + `caption`
+2. Poll `GET /{creation_id}?fields=status_code` until `FINISHED` (up to 90s)
+3. `POST /{ig-user-id}/media_publish` — publishes the container
 
 ## Rules
 
 - **Never** post without a file in `vault/Approved/`
-- **Image is mandatory** — the executor will error without a valid image path
-- **Always** screenshot the published post for the audit log
+- **Image URL must be public HTTPS** — local paths are rejected by the API
 - **Always** log every post attempt to `vault/Logs/`
 - **Max 3 posts per day** to avoid spam flags

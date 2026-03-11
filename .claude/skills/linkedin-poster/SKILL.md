@@ -2,14 +2,14 @@
 name: linkedin-poster
 description: |
   Create and publish LinkedIn posts for business/sales content using the
-  existing LinkedIn Playwright session. Use when asked to post on LinkedIn,
+  official LinkedIn UGC Posts API. Use when asked to post on LinkedIn,
   schedule a sales post, or process an approved LinkedIn post action from
   vault/Approved/. Always draft first and require human approval before posting.
 ---
 
 # LinkedIn Poster
 
-Publish posts to LinkedIn for business visibility and lead generation.
+Publish posts to a LinkedIn personal profile using the official UGC Posts API (no browser required).
 
 ## When to Use
 
@@ -19,12 +19,86 @@ Publish posts to LinkedIn for business visibility and lead generation.
 
 **Never post directly** — always route through `vault/Pending_Approval/` first.
 
-## Session Requirement
+## One-Time Setup
 
-The LinkedIn Playwright session must already exist at `$LINKEDIN_SESSION_PATH`
-(default: `~/.sessions/linkedin/`). If missing or expired, run:
+### 1. Create a LinkedIn Developer App
+
+1. Go to https://www.linkedin.com/developers/ → **Create App**
+2. Select your LinkedIn Company Page as the associated company
+3. Under **Products**, request: **Share on LinkedIn** + **Sign In with LinkedIn using OpenID Connect**
+4. Under **Auth** tab → copy **Client ID** and **Client Secret**
+5. Add Redirect URL: `http://localhost:8765/callback`
+
+### 2. Add credentials to `.env`
+
+```
+LINKEDIN_API_CLIENT_ID=xxxxx
+LINKEDIN_API_CLIENT_SECRET=xxxxx
+```
+
+### 3. Run the OAuth helper to get your access token
+
 ```bash
-cd watchers && python auth_linkedin.py
+python watchers/auth_linkedin_api.py
+```
+
+This opens your browser, completes the OAuth flow, and prints the values to add to `.env`:
+
+```
+LINKEDIN_API_ACCESS_TOKEN=xxxxx
+LINKEDIN_API_PERSON_URN=urn:li:person:xxxxx
+```
+
+Tokens last ~60 days. Re-run the auth helper when expired.
+
+## Approval File Format
+
+```markdown
+---
+type: approval_request
+action: send_linkedin_post
+status: approved
+---
+
+# What will happen after approval?
+
+The following post will be published to LinkedIn.
+
+## Message / Content
+
+  [Hook line here]
+
+  [Body paragraphs]
+
+  [CTA]
+
+  #hashtag1 #hashtag2 #hashtag3
+```
+
+Save to `vault/Approved/APPROVAL_SEND_LINKEDIN_POST_<topic>_<YYYY-MM-DD>.md`
+
+## Dry-Run Mode
+
+```bash
+python .claude/skills/linkedin-poster/scripts/create_post.py \
+  --content "Post text..." --dry-run
+```
+
+Expected output:
+```json
+{"status": "dry_run", "content_len": 42, "preview": "Post text...", "timestamp": "..."}
+```
+
+## Live Post
+
+```bash
+python .claude/skills/linkedin-poster/scripts/create_post.py \
+  --content "Post text..."
+```
+
+Expected output:
+```json
+{"status": "posted", "post_id": "urn:li:share:...", "post_url": "https://www.linkedin.com/feed/update/...", "timestamp": "..."}
 ```
 
 ## Post Strategy — Sales Content Framework
@@ -39,7 +113,7 @@ Every LinkedIn post should follow one of these proven frameworks:
 | **Direct Offer** | Promotion or launch | "We're opening [N] spots for [service]. Here's what's included:" |
 | **Question / Poll** | Engagement | "Quick question for [audience]: [specific question]?" |
 
-### Post Structure (always follow this)
+### Post Structure
 ```
 [HOOK — 1-2 lines, no period at end, creates curiosity]
 
@@ -50,104 +124,16 @@ Every LinkedIn post should follow one of these proven frameworks:
 [HASHTAGS — 3-5 relevant hashtags on last line]
 ```
 
-## Workflow
+**Max 3,000 characters.** Script enforces this limit.
 
-### 1. Draft the Post
+## LinkedIn DM
 
-Before posting, write the draft and save it:
-
-```bash
-# Save draft to a temp file for review
-cat > /tmp/linkedin_post_draft.txt << 'EOF'
-[Hook line here]
-
-[Body paragraph 1]
-
-[Body paragraph 2]
-
-[CTA]
-
-#hashtag1 #hashtag2 #hashtag3
-EOF
-```
-
-Create an approval request in `vault/Pending_Approval/`:
-```
-vault/Pending_Approval/APPROVAL_SEND_LINKEDIN_POST_<topic>_<YYYY-MM-DD>.md
-```
-
-### 2. Post After Approval
-
-Once the approval file is in `vault/Approved/`:
-
-```bash
-python .claude/skills/linkedin-poster/scripts/create_post.py \
-  --content-file /tmp/linkedin_post_draft.txt \
-  --session-path ~/.sessions/linkedin
-```
-
-Or inline for short posts:
-```bash
-python .claude/skills/linkedin-poster/scripts/create_post.py \
-  --content "Your post text here..." \
-  --session-path ~/.sessions/linkedin
-```
-
-Expected output:
-```json
-{"status": "posted", "post_url": "https://www.linkedin.com/feed/update/...", "timestamp": "..."}
-```
-
-### 3. Update the Vault
-
-After successful post:
-1. Set `status: posted` and add `posted_at: <ISO>` to the approval file
-2. Move approval file → `vault/Done/`
-3. Write audit log entry to `vault/Logs/YYYY-MM-DD.jsonl`:
-```json
-{"timestamp": "...", "event": "linkedin_post_published", "post_url": "...", "result": "success"}
-```
-4. Update `Dashboard.md`
-
-## Playwright Steps (Manual Reference)
-
-The `create_post.py` script automates these steps:
-
-1. Launch with persistent context: `~/.sessions/linkedin/`
-2. Navigate to `https://www.linkedin.com/feed/`
-3. Click **"Start a post"** button
-4. Wait for the post modal to open
-5. Click into the text area and type the content
-6. Click **"Post"** button
-7. Wait for `networkidle` to confirm posting
-8. Extract the post URL from the feed
-
-## Content Calendar Template
-
-When drafting a weekly content plan, use this structure:
-
-```markdown
-## LinkedIn Post Calendar — Week of YYYY-MM-DD
-
-| Day | Type | Topic | Hook |
-|-----|------|-------|------|
-| Monday | Problem→Solution | [service] | "[hook]" |
-| Wednesday | Value List | [topic] | "[hook]" |
-| Friday | Story/Social Proof | [result] | "[hook]" |
-```
-
-## Dry-Run Mode
-
-Preview what would be posted without opening a browser:
-```bash
-python .claude/skills/linkedin-poster/scripts/create_post.py \
-  --content "Post text..." --dry-run
-```
+LinkedIn DMs to arbitrary users are **not supported by the API** (requires special partner access).
+The `linkedin-dm` skill continues to use Playwright for DMs.
 
 ## Rules (non-negotiable)
 
 - **Never** post without a file in `vault/Approved/`
 - **Never** post competitor mentions, pricing without approval, or personal information
 - **Max 1 post per day** — LinkedIn penalises over-posting
-- **Always** screenshot the published post for the audit log
 - **Always** log every post attempt to `vault/Logs/`

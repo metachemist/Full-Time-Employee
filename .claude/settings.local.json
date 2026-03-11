@@ -48,7 +48,13 @@
       "Bash(SESSION_PATH=\"/home/metachemist/Code/full_time_employee/.sessions/linkedin\"\n.venv/bin/python .claude/skills/linkedin-poster/scripts/create_post.py \\\\\n  --content \"Test post from executor\" \\\\\n  --session-path \"$SESSION_PATH\" \\\\\n  --dry-run 2>&1)",
       "Bash(ls vault/Done/APPROVAL_SEND_LINKEDIN_DM_self_test* 2>&1)",
       "Bash(grep \"shehryar_test\" vault/Logs/*.jsonl | tail -1 | python3 -c \"import sys,json; l=sys.stdin.read\\(\\); print\\(json.dumps\\(json.loads\\(l.split\\(':',1\\)[1]\\), indent=2\\)\\)\")",
-      "Bash(ls -t /tmp/linkedin_dm_*.png | head -1)"
+      "Bash(ls -t /tmp/linkedin_dm_*.png | head -1)",
+      "Bash(ls -1 /home/metachemist/Code/full_time_employee/watchers/*.py | xargs -I {} basename {})",
+      "Bash(find /home/metachemist -name \"*.jpg\" -o -name \"*.png\" 2>/dev/null | head -20)",
+      "Bash(pm2 delete watcher-linkedin 2>&1)",
+      "Bash(find /home/metachemist/Code/full_time_employee -name \"auth_twitter*\" 2>/dev/null; git -C /home/metachemist/Code/full_time_employee show HEAD~5:watchers/auth_twitter.py 2>/dev/null | head -60)",
+      "Bash(git -C /home/metachemist/Code/full_time_employee show HEAD~3:.claude/skills/twitter-poster/scripts/create_post.py 2>/dev/null | head -80)",
+      "Bash(git rm:*)"
     ]
   },
   "hooks": {

@@ -1,0 +1,8 @@
+{"timestamp": "2026-03-05T01:42:19.810084+00:00", "source": "LinkedInWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-05T01:42:23.375441+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-05T09:17:56.518309+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-05T09:17:56.524276+00:00", "source": "LinkedInWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-05T09:18:02.959735+00:00", "source": "LinkedInWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-05T09:18:06.610561+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-05T15:41:51.198204+00:00", "source": "LinkedInWatcher", "event": "watcher_started", "interval": 30}
+{"timestamp": "2026-03-05T15:41:54.692217+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
