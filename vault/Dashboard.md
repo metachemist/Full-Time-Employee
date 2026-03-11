@@ -1,5 +1,5 @@
 ---
-updated: 2026-03-11T15:44:37.264763+00:00
+updated: 2026-03-11T17:45:38.016571+00:00
 ---
 
 # AI Employee — Dashboard
@@ -13,11 +13,11 @@ updated: 2026-03-11T15:44:37.264763+00:00
 | ⏳ Pending Approval | 0     |
 | ✅ Approved        | 1     |
 | ❌ Rejected        | 0     |
-| 🗂 Done            | 48     |
+| 🗂 Done            | 0     |
 
 ## Recent Activity
 
 _No recent activity this session._
 
 ---
-*Updated by Planning Engine — 2026-03-11 15:44 UTC*
+*Updated by Planning Engine — 2026-03-11 17:45 UTC*
