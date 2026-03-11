@@ -1,0 +1,15 @@
+---
+type: approval_request
+action: send_instagram_post
+status: approved
+---
+
+# Test Instagram Post — AI Employee Pipeline
+
+## Target
+
+  https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1080
+
+## Message / Content
+
+  Testing our autonomous AI employee pipeline. If you see this, the system works end-to-end. #AI #Automation #ClaudeCode
