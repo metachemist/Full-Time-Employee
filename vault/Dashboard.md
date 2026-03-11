@@ -1,5 +1,5 @@
 ---
-updated: 2026-03-11T11:44:21.947284+00:00
+updated: 2026-03-11T12:20:52.207169+00:00
 ---
 
 # AI Employee — Dashboard
@@ -8,11 +8,11 @@ updated: 2026-03-11T11:44:21.947284+00:00
 
 | Folder             | Files |
 |--------------------|-------|
-| 📥 Needs Action    | 2     |
+| 📥 Needs Action    | 0     |
 | 📋 Plans           | 2     |
 | ⏳ Pending Approval | 2     |
-| ✅ Approved        | 2     |
-| ❌ Rejected        | 0     |
+| ✅ Approved        | 5     |
+| ❌ Rejected        | 2     |
 | 🗂 Done            | 48     |
 
 ## Recent Activity
@@ -21,4 +21,4 @@ updated: 2026-03-11T11:44:21.947284+00:00
 - `2026-03-11 11:39 UTC` [FILE_DROP] Unknown → `PLAN_FILE_DROP_Unknown_EMAIL_19cdcb105214cc_2026-03-11.md` + `APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19cdcb1052_2026-03-11.md`
 
 ---
-*Updated by Planning Engine — 2026-03-11 11:44 UTC*
+*Updated by Planning Engine — 2026-03-11 12:20 UTC*
