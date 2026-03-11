@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "cebf344c45761b17",
+        "id": "61e4c5ce4148c9bf",
         "type": "tabs",
         "children": [
           {
-            "id": "fc6664c3cdb9da53",
+            "id": "38acfc02598e67c4",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "Needs_Action/EMAIL_19ca5a39d490c7a2.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "EMAIL_19ca5a39d490c7a2"
+              "title": "New tab"
             }
           }
         ]
@@ -180,35 +176,35 @@
       "bases:Create new base": false
     }
   },
-  "active": "fc6664c3cdb9da53",
+  "active": "1e1175780b419f39",
   "lastOpenFiles": [
+    "Done/APPROVAL_SEND_EMAIL_Neon_EMAIL_19ca74e45b_2026-03-01.md",
+    "Done/APPROVAL_SEND_EMAIL_Hafsa_Shahid_EMAIL_19ca5af26f_2026-03-01.md",
+    "Done/APPROVAL_SEND_EMAIL_Hafsa_Shahid_EMAIL_19ca5a39d4_2026-03-01.md",
+    "Done/APPROVAL_SEND_EMAIL_Hafsa_Shahid_EMAIL_19c86291ea_2026-02-22.md",
+    "Done/APPROVAL_SEND_EMAIL_Hafsa_Shahid.md",
+    "Done/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19cc87e210_2026-03-07.md",
+    "Done/APPROVAL_SEND_EMAIL_Facebook_EMAIL_19cc750c5c_2026-03-07.md",
+    "Plans/PLAN_GMAIL_Facebook_EMAIL_19cdba6c0572fc_2026-03-11.md",
+    "Rejected/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19cdcb1052_2026-03-11.md",
+    "Rejected/APPROVAL_SEND_EMAIL_Facebook_EMAIL_19cdba6c05_2026-03-11.md",
+    "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19cdcb105214cc_2026-03-11.md",
+    "Failed/APPROVAL_SEND_FACEBOOK_POST_Test_2026-03-10.md",
+    "Pending_Approval/EMAIL_19ca5af26f635537.md",
+    "Pending_Approval/EMAIL_19ca5a39d490c7a2.md",
+    "Failed/APPROVAL_SEND_TWITTER_POST_Agentic_AI_Thread_2026-03-08.md",
+    "Failed/APPROVAL_SEND_TWITTER_POST_Test_2026-03-10.md",
+    "Briefings/BRIEFING_DAILY_2026-03-08.md",
+    "Briefings/BRIEFING_DAILY_2026-03-01.md",
+    "Approved/WEEKLY_REVIEW_2026-03-08.md",
+    "Approved/APPROVAL_SEND_EMAIL_Hafsa_Test_2026-03-10.md",
+    "Approved/APPROVAL_SEND_EMAIL_Facebook_EMAIL_19cc7deaac_2026-03-07.md",
+    "Approved/WEEKLY_REVIEW_2026-03-01.md",
+    "Approved/APPROVAL_SEND_INSTAGRAM_POST_Test_2026-03-10.md",
+    "Done/EMAIL_19cc7deaac1e575b.md",
     "Approved/APPROVAL_SEND_LINKEDIN_DM_test.md",
     "Rejected/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19ca5ca7e3_2026-03-01.md",
-    "Rejected/APPROVAL_SEND_EMAIL_Hafsa_Shahid_EMAIL_19ca5af26f_2026-03-01.md",
-    "Rejected/APPROVAL_SEND_EMAIL_Hafsa_Shahid_EMAIL_19ca5a39d4_2026-03-01.md",
-    "Done/APPROVAL_SEND_EMAIL_Hafsa_Shahid.md",
-    "demo email.md",
-    "Done/EMAIL_19ca5ca7e3d5dd8d.md",
-    "Plans/PLAN_FILE_DROP_Unknown_EMAIL_19ca5ca7e3d5dd_2026-03-01.md",
-    "Needs_Action/EMAIL_19ca5ca7e3d5dd8d.md",
-    "Approved/APPROVAL_SEND_LINKEDIN_POST_test2.md",
-    "Approved/APPROVAL_SEND_EMAIL_Hafsa_Shahid_1772305702.md",
-    "Pending_Approval/APPROVAL_SEND_EMAIL_Hafsa_Shahid_1772305702.md",
-    "Pending_Approval/APPROVAL_SEND_LINKEDIN_POST_test2.md",
-    "Needs_Action/EMAIL_19ca5af26f635537.md",
-    "Done/EMAIL_19ca5af26f635537.md",
-    "Plans/PLAN_GMAIL_Hafsa_Shahid_EMAIL_19ca5af26f6355_2026-03-01.md",
-    "Approved/APPROVAL_SEND_EMAIL_Hafsa_Shahid.md",
-    "Done/APPROVAL_SEND_EMAIL_Hafsa_Shahid_1772305702.md",
-    "Needs_Action/EMAIL_19ca5a39d490c7a2.md",
     "Logs/2026-03-01.jsonl",
-    "Done/EMAIL_19ca5a39d490c7a2.md",
-    "Plans/PLAN_GMAIL_Hafsa_Shahid_EMAIL_19ca5a39d490c7_2026-03-01.md",
-    "Done/APPROVAL_SEND_LINKEDIN_POST_test2.md",
-    "Pending_Approval/APPROVAL_SEND_EMAIL_Hafsa_Shahid.md",
-    "Approved/approved_email_hafsa_shahid.md",
-    "Pending_Approval/APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19c856235b_2026-02-22.md",
-    "Approved/APPROVAL_SEND_LINKEDIN_DM_Shehryar_Ahmed_LINKEDIN_LEAD_Sh_2026-02-22.md",
     "Untitled.canvas",
     "Logs/2026-02-20.json",
     "Logs/2026-02-18.json"

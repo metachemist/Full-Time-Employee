@@ -1,3 +1,7 @@
 {"timestamp": "2026-03-11T01:04:43.483501+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
 {"timestamp": "2026-03-11T06:47:53.700444+00:00", "source": "GmailWatcher", "event": "item_created", "file": "EMAIL_19cdba6c0572fcd5.md", "item_id": "19cdba6c0572fcd5"}
 {"timestamp": "2026-03-11T06:48:19.127626+00:00", "event": "item_processed", "source": "gmail", "filename": "EMAIL_19cdba6c0572fcd5.md", "plan": "PLAN_GMAIL_Facebook_EMAIL_19cdba6c0572fc_2026-03-11.md", "approval": "APPROVAL_SEND_EMAIL_Facebook_EMAIL_19cdba6c05_2026-03-11.md", "priority": "high", "risk": "low", "result": "success"}
+{"timestamp": "2026-03-11T11:38:57.227351+00:00", "source": "GmailWatcher", "event": "item_created", "file": "EMAIL_19cdcb105214cc88.md", "item_id": "19cdcb105214cc88"}
+{"timestamp": "2026-03-11T11:39:21.900960+00:00", "event": "item_processed", "source": "file_drop", "filename": "EMAIL_19cdcb105214cc88.md", "plan": "PLAN_FILE_DROP_Unknown_EMAIL_19cdcb105214cc_2026-03-11.md", "approval": "APPROVAL_SEND_MESSAGE_Unknown_EMAIL_19cdcb1052_2026-03-11.md", "priority": "low", "risk": "low", "result": "success"}
+{"timestamp": "2026-03-11T12:29:23.867008+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
+{"timestamp": "2026-03-11T12:29:32.725467+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}

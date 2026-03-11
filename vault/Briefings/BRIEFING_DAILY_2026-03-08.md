@@ -67,7 +67,7 @@ Rejections are accumulating in `vault/Rejected/` and have not been moved to `vau
 
 - 2x Hafsa Shahid email replies (rejected 2026-03-01)
 - 1x Neon email reply (rejected 2026-03-01)
-- 2x LinkedIn DMs — Taha Siraj, Vinodh Kumar
+- 2x LinkedIn DMs 
 - 4x Unknown sender message approvals
 - 2x Facebook email approvals (2026-03-07)
 
