@@ -8,9 +8,11 @@ Provides:
 """
 
 import json
+import os
 import time
 import logging
 import logging.handlers
+import urllib.request
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
@@ -148,12 +150,14 @@ class BaseWatcher(ABC):
         return set()
 
     def _save_state(self) -> None:
-        """Persist processed IDs to disk immediately."""
+        """Persist processed IDs to disk atomically (write-then-replace)."""
         try:
-            self._state_file.write_text(
+            tmp = self._state_file.with_suffix(".tmp")
+            tmp.write_text(
                 json.dumps({"processed_ids": sorted(self.processed_ids)}, indent=2),
                 encoding="utf-8",
             )
+            os.replace(tmp, self._state_file)
         except OSError as exc:
             self.logger.error(f"Could not save state file: {exc}")
 
@@ -186,6 +190,20 @@ class BaseWatcher(ABC):
                 f.write(json.dumps(entry, default=str) + "\n")
         except Exception as exc:
             self.logger.error(f"Failed to write audit log: {exc}")
+
+    # ------------------------------------------------------------------
+    # Dead-man switch — ping Healthchecks.io after each successful cycle
+    # ------------------------------------------------------------------
+
+    def _ping_healthcheck(self) -> None:
+        """Ping HEALTHCHECK_URL env var (silently no-ops if unset or unreachable)."""
+        url = os.environ.get("HEALTHCHECK_URL", "").strip()
+        if not url:
+            return
+        try:
+            urllib.request.urlopen(url, timeout=5)
+        except Exception:
+            pass  # Never let a failed ping crash the watcher
 
     # ------------------------------------------------------------------
     # Abstract interface
@@ -231,6 +249,7 @@ class BaseWatcher(ABC):
                             error=str(exc),
                             item=str(item)[:200],
                         )
+                self._ping_healthcheck()
                 time.sleep(self.check_interval)
             except KeyboardInterrupt:
                 self.logger.info("Shutdown requested — exiting cleanly.")

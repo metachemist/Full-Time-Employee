@@ -16,6 +16,7 @@ The watcher runs until interrupted (Ctrl+C). Keep it alive with PM2:
 import sys
 import time
 import argparse
+import uuid
 
 from datetime import datetime
 from pathlib import Path
@@ -81,6 +82,7 @@ class FileSystemWatcher(BaseWatcher):
         except OSError:
             size = 0
 
+        trace_id = str(uuid.uuid4())
         content = f"""\
 ---
 type: file_drop
@@ -89,6 +91,7 @@ source_path: {file_path}
 size_bytes: {size}
 received: {timestamp.isoformat()}
 status: pending
+trace_id: {trace_id}
 ---
 
 ## New File: {file_path.name}
@@ -168,9 +171,16 @@ This is **auto-approved** (read-only — no external action). Move this file to 
         observer.schedule(handler, str(self.inbox), recursive=False)
         observer.start()
 
+        _last_ping = 0.0
+        _PING_INTERVAL = 60  # seconds
+
         try:
             while True:
                 time.sleep(1)
+                now = time.time()
+                if now - _last_ping >= _PING_INTERVAL:
+                    self._ping_healthcheck()
+                    _last_ping = now
         except KeyboardInterrupt:
             self.logger.info("Shutting down.")
         finally:

@@ -30,14 +30,17 @@ Usage
     python -m orchestrator.planning_engine --vault ./vault --loop --interval 30
 """
 
+import fcntl
 import json
 import logging
 import logging.handlers
 import argparse
+import os
 import re
 import sys
 import time
 import textwrap
+import uuid
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 from typing import Any
@@ -345,6 +348,7 @@ def build_plan(
     approval_needed: bool,
     plan_path: Path,
     approval_path: Path | None,
+    trace_id: str = "",
 ) -> str:
     rel_source  = source_file.relative_to(vault_path)
     sender_disp = _sender(fm)
@@ -376,6 +380,7 @@ def build_plan(
         else "- [ ] _(no approval needed — internal item)_"
     )
 
+    trace_line = f"\ntrace_id: {trace_id}" if trace_id else ""
     return f"""\
 ---
 type: plan
@@ -385,7 +390,7 @@ created: {_now_iso()}
 status: planned
 priority: {priority}
 risk: {risk}
-requires_approval: {str(approval_needed).lower()}
+requires_approval: {str(approval_needed).lower()}{trace_line}
 ---
 
 # Objective
@@ -442,6 +447,7 @@ def build_approval(
     fm: dict,
     body: str,
     draft: str,
+    trace_id: str = "",
 ) -> str:
     rel_plan      = plan_path.relative_to(vault_path)
     target        = (
@@ -456,6 +462,7 @@ def build_approval(
     draft_block   = textwrap.indent(draft.strip(), "  ")
 
     expires_at = (datetime.now(timezone.utc) + timedelta(hours=72)).isoformat()
+    trace_line = f"\ntrace_id: {trace_id}" if trace_id else ""
 
     return f"""\
 ---
@@ -464,7 +471,7 @@ action: {action}
 source_plan: {rel_plan}
 created: {_now_iso()}
 expires_at: {expires_at}
-status: pending
+status: pending{trace_line}
 ---
 
 # What will happen after approval?
@@ -515,10 +522,12 @@ class StateStore:
         return {"processed": {}}
 
     def _save(self) -> None:
-        self._path.write_text(
+        tmp = self._path.with_suffix(".tmp")
+        tmp.write_text(
             json.dumps(self._data, indent=2, default=str),
             encoding="utf-8",
         )
+        os.replace(tmp, self._path)
 
     def is_processed(self, filename: str) -> bool:
         return filename in self._data["processed"]
@@ -604,7 +613,9 @@ updated: {_now_iso()}
 ---
 *Updated by Planning Engine — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}*
 """
-    (vault_path / "Dashboard.md").write_text(content, encoding="utf-8")
+    tmp = vault_path / "Dashboard.md.tmp"
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, vault_path / "Dashboard.md")
 
 
 # ---------------------------------------------------------------------------
@@ -673,116 +684,141 @@ class PlanningEngine:
             self.log.debug(f"Already processed: {filename}")
             return
 
-        self.log.info(f"Processing: {filename}")
-        ts = _now_iso()
-
+        # Acquire exclusive non-blocking lock — skip if another process holds it
         try:
-            text = md_file.read_text(encoding="utf-8")
+            lock_fd = md_file.open("r", encoding="utf-8")
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.log.debug(f"Skipping {filename} — locked by another process")
+            return
         except OSError as exc:
-            self.log.error(f"Cannot read {filename}: {exc}")
+            self.log.warning(f"Cannot lock {filename}: {exc}")
             return
 
-        fm, body     = parse_md(text)
-        full_text    = " ".join(str(v) for v in fm.values()) + " " + body
-
-        source       = str(fm.get("source", "file_drop")).lower()
-        risk         = classify_risk(full_text)
-        approval     = needs_approval(full_text, source, risk)
-        priority     = self._priority(fm, risk)
-        sender_raw   = _sender(fm)
-
-        # ── Plan path ─────────────────────────────────────────────────
-        plan_name    = self._plan_filename(source, sender_raw, md_file.stem)
-        plan_path    = self.vault / "Plans" / plan_name
-
-        # ── Approval path ──────────────────────────────────────────────
-        approval_path: Path | None = None
-        if approval:
-            action        = action_for(source, fm)
-            appr_name     = self._approval_filename(action, sender_raw, md_file.stem)
-            approval_path = self.vault / "Pending_Approval" / appr_name
-
-        # ── Write Plan, Approval, move original (with rollback on failure) ──
-        plan_written     = False
-        approval_written = False
         try:
-            plan_content = build_plan(
-                source_file     = md_file,
-                vault_path      = self.vault,
-                source          = source,
-                fm              = fm,
-                body            = body,
-                priority        = priority,
-                risk            = risk,
-                approval_needed = approval,
-                plan_path       = plan_path,
-                approval_path   = approval_path,
-            )
-            plan_path.write_text(plan_content, encoding="utf-8")
-            plan_written = True
-            self.log.info(f"  Plan      → Plans/{plan_name}")
+            # Re-check after acquiring lock: another process may have just finished
+            if not md_file.exists() or self.state.is_processed(filename):
+                return
 
-            if approval_path:
-                draft        = generate_draft(source, fm, body)
-                action_str   = action_for(source, fm)
-                appr_content = build_approval(
-                    action      = action_str,
-                    plan_path   = plan_path,
-                    vault_path  = self.vault,
-                    source      = source,
-                    fm          = fm,
-                    body        = body,
-                    draft       = draft,
+            self.log.info(f"Processing: {filename}")
+            ts = _now_iso()
+            text = lock_fd.read()
+        except OSError as exc:
+            self.log.error(f"Cannot read {filename}: {exc}")
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+            lock_fd.close()
+            return
+
+        try:
+            fm, body     = parse_md(text)
+            full_text    = " ".join(str(v) for v in fm.values()) + " " + body
+
+            source       = str(fm.get("source", "file_drop")).lower()
+            trace_id     = str(fm.get("trace_id", ""))
+            risk         = classify_risk(full_text)
+            approval     = needs_approval(full_text, source, risk)
+            priority     = self._priority(fm, risk)
+            sender_raw   = _sender(fm)
+
+            # ── Plan path ─────────────────────────────────────────────────
+            plan_name    = self._plan_filename(source, sender_raw, md_file.stem)
+            plan_path    = self.vault / "Plans" / plan_name
+
+            # ── Approval path ──────────────────────────────────────────────
+            approval_path: Path | None = None
+            if approval:
+                action        = action_for(source, fm)
+                appr_name     = self._approval_filename(action, sender_raw, md_file.stem)
+                approval_path = self.vault / "Pending_Approval" / appr_name
+
+            # ── Write Plan, Approval, move original (with rollback on failure) ──
+            plan_written     = False
+            approval_written = False
+            try:
+                plan_content = build_plan(
+                    source_file     = md_file,
+                    vault_path      = self.vault,
+                    source          = source,
+                    fm              = fm,
+                    body            = body,
+                    priority        = priority,
+                    risk            = risk,
+                    approval_needed = approval,
+                    plan_path       = plan_path,
+                    approval_path   = approval_path,
+                    trace_id        = trace_id,
                 )
-                approval_path.write_text(appr_content, encoding="utf-8")
-                approval_written = True
-                self.log.info(f"  Approval  → Pending_Approval/{approval_path.name}")
+                plan_path.write_text(plan_content, encoding="utf-8")
+                plan_written = True
+                self.log.info(f"  Plan      → Plans/{plan_name}")
 
-            done_dest = self.vault / "Done" / filename
-            if done_dest.exists():
-                stem, sfx = done_dest.stem, done_dest.suffix
-                done_dest = done_dest.with_name(f"{stem}_{int(time.time())}{sfx}")
-            md_file.rename(done_dest)
-            self.log.info(f"  Archived  → Done/{done_dest.name}")
+                if approval_path:
+                    draft        = generate_draft(source, fm, body)
+                    action_str   = action_for(source, fm)
+                    appr_content = build_approval(
+                        action      = action_str,
+                        plan_path   = plan_path,
+                        vault_path  = self.vault,
+                        source      = source,
+                        fm          = fm,
+                        body        = body,
+                        draft       = draft,
+                        trace_id    = trace_id,
+                    )
+                    approval_path.write_text(appr_content, encoding="utf-8")
+                    approval_written = True
+                    self.log.info(f"  Approval  → Pending_Approval/{approval_path.name}")
 
-        except Exception:
-            # Clean up any partially written files so the next cycle can retry
-            if plan_written and plan_path.exists():
-                plan_path.unlink(missing_ok=True)
-            if approval_written and approval_path and approval_path.exists():
-                approval_path.unlink(missing_ok=True)
-            raise
+                done_dest = self.vault / "Done" / filename
+                if done_dest.exists():
+                    stem, sfx = done_dest.stem, done_dest.suffix
+                    done_dest = done_dest.with_name(f"{stem}_{int(time.time())}{sfx}")
+                md_file.rename(done_dest)
+                self.log.info(f"  Archived  → Done/{done_dest.name}")
 
-        # ── Persist state (only after all writes succeed) ──────────────
-        self.state.mark_processed(
-            filename,
-            plan_path     = str(plan_path.relative_to(self.vault)),
-            approval_path = (
-                str(approval_path.relative_to(self.vault))
-                if approval_path else None
-            ),
-            timestamp = ts,
-        )
+            except Exception:
+                # Clean up any partially written files so the next cycle can retry
+                if plan_written and plan_path.exists():
+                    plan_path.unlink(missing_ok=True)
+                if approval_written and approval_path and approval_path.exists():
+                    approval_path.unlink(missing_ok=True)
+                raise
 
-        # ── Audit log ──────────────────────────────────────────────────
-        self.audit.write(
-            "item_processed",
-            source    = source,
-            filename  = filename,
-            plan      = plan_name,
-            approval  = approval_path.name if approval_path else None,
-            priority  = priority,
-            risk      = risk,
-            result    = "success",
-        )
+            # ── Persist state (only after all writes succeed) ──────────────
+            self.state.mark_processed(
+                filename,
+                plan_path     = str(plan_path.relative_to(self.vault)),
+                approval_path = (
+                    str(approval_path.relative_to(self.vault))
+                    if approval_path else None
+                ),
+                timestamp = ts,
+            )
 
-        # ── Dashboard activity line ────────────────────────────────────
-        ts_short = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        appr_note = f" + `{approval_path.name}`" if approval_path else ""
-        self._recent.append(
-            f"`{ts_short}` [{source.upper()}] {sender_raw[:35]} "
-            f"→ `{plan_name}`{appr_note}"
-        )
+            # ── Audit log ──────────────────────────────────────────────────
+            self.audit.write(
+                "item_processed",
+                source    = source,
+                filename  = filename,
+                plan      = plan_name,
+                approval  = approval_path.name if approval_path else None,
+                priority  = priority,
+                risk      = risk,
+                result    = "success",
+                **( {"trace_id": trace_id} if trace_id else {} ),
+            )
+
+            # ── Dashboard activity line ────────────────────────────────────
+            ts_short = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            appr_note = f" + `{approval_path.name}`" if approval_path else ""
+            self._recent.append(
+                f"`{ts_short}` [{source.upper()}] {sender_raw[:35]} "
+                f"→ `{plan_name}`{appr_note}"
+            )
+
+        finally:
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+            lock_fd.close()
 
     # ------------------------------------------------------------------
     # Public API

@@ -25,6 +25,7 @@ import os
 import sys
 import argparse
 import email.utils
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -63,6 +64,33 @@ _TOKEN_FILE = Path(__file__).parent / ".state" / "gmail_token.json"
 
 # Maximum emails fetched per poll (avoids large bursts on first run)
 _MAX_RESULTS = 30
+
+
+# ---------------------------------------------------------------------------
+# Sender classification
+# ---------------------------------------------------------------------------
+
+_BOT_KEYWORDS = ("noreply", "no-reply", "notifications@", "donotreply", "mailer-daemon")
+_BOT_DOMAINS  = ("github.com", "gitlab.com", "bitbucket.org", "jira.com", "linear.app",
+                  "asana.com", "trello.com", "slack.com", "notion.so")
+
+
+def _sender_tag(sender: str) -> str:
+    """Return 'BOT_<name>' or 'HUMAN_<name>' based on the sender string."""
+    lower = sender.lower()
+    is_bot = (
+        "[bot]" in lower
+        or any(kw in lower for kw in _BOT_KEYWORDS)
+        or any(lower.endswith(f"@{d}>") or f"@{d}" in lower for d in _BOT_DOMAINS)
+    )
+    # Extract a short display name (before the email address)
+    import re
+    name_match = re.match(r'^"?([^"<]+)"?\s*(?:<.*>)?$', sender.strip())
+    name = name_match.group(1).strip() if name_match else sender.split("@")[0]
+    # Sanitise to filename-safe characters, max 20 chars
+    safe = re.sub(r'[^A-Za-z0-9]+', '_', name).strip('_')[:20]
+    prefix = "BOT" if is_bot else "HUMAN"
+    return f"{prefix}_{safe}"
 
 
 # ---------------------------------------------------------------------------
@@ -183,16 +211,23 @@ class GmailWatcher(BaseWatcher):
         except Exception:
             received = datetime.now(timezone.utc).isoformat()
 
+        def _ys(value: str) -> str:
+            """Wrap a value in single-quoted YAML string, escaping internal quotes."""
+            return "'" + value.replace("'", "''") + "'"
+
+        trace_id = str(uuid.uuid4())
+
         content = f"""\
 ---
 type: email
 source: gmail
-from: {sender}
-to: {to}
-subject: {subject}
+from: {_ys(sender)}
+to: {_ys(to)}
+subject: {_ys(subject)}
 received: {received}
 priority: high
 status: pending
+trace_id: {trace_id}
 ---
 
 ## Email: {subject}
@@ -214,7 +249,8 @@ status: pending
 - [ ] Move this file to /Done when complete
 """
 
-        filepath = self.needs_action / f"EMAIL_{message['id']}.md"
+        tag = _sender_tag(sender)
+        filepath = self.needs_action / f"EMAIL_{tag}_{message['id']}.md"
         filepath.write_text(content, encoding="utf-8")
         self._mark_processed(message["id"])
         return filepath
