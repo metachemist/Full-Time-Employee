@@ -34,8 +34,12 @@ module.exports = {
       watch:       false,
       autorestart: true,
       max_restarts: 9999,
-      min_uptime: "10s",
+      min_uptime:  "10s",
       exp_backoff_restart_delay: 100,
+      // Health: restart if process eats more than 256 MB (filesystem watcher is lightweight)
+      max_memory_restart: "256M",
+      kill_timeout:       5000,   // ms to wait for graceful SIGTERM before SIGKILL
+      restart_delay:      4000,   // ms to wait between crash restarts
       env: {
         PYTHONUNBUFFERED: "1",
       },
@@ -54,8 +58,11 @@ module.exports = {
       watch:       false,
       autorestart: true,
       max_restarts: 9999,
-      min_uptime: "10s",
+      min_uptime:  "10s",
       exp_backoff_restart_delay: 100,
+      max_memory_restart: "256M",
+      kill_timeout:       5000,
+      restart_delay:      4000,
       env_file:    path.resolve(__dirname, ".env"),
       env: {
         PYTHONUNBUFFERED: "1",
@@ -75,8 +82,13 @@ module.exports = {
       watch:       false,
       autorestart: true,
       max_restarts: 9999,
-      min_uptime: "10s",
+      min_uptime:  "10s",
       exp_backoff_restart_delay: 100,
+      // Playwright (Chromium) can spike memory; allow up to 1 GB before restart
+      max_memory_restart: "1G",
+      kill_timeout:       10000,  // allow 10s for graceful shutdown (Playwright cleanup)
+      restart_delay:      4000,
+      listen_timeout:     15000,  // ms to wait for process to be "ready"
       env: {
         PYTHONUNBUFFERED: "1",
         PYTHONPATH:       path.resolve(__dirname),
@@ -96,8 +108,11 @@ module.exports = {
       watch:       false,
       autorestart: true,
       max_restarts: 9999,
-      min_uptime: "10s",
+      min_uptime:  "10s",
       exp_backoff_restart_delay: 100,
+      max_memory_restart: "512M",
+      kill_timeout:       5000,
+      restart_delay:      4000,
       env: {
         PYTHONUNBUFFERED: "1",
         PYTHONPATH:       path.resolve(__dirname),

@@ -38,9 +38,11 @@ import argparse
 import os
 import re
 import sys
+import threading
 import time
 import textwrap
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 from typing import Any
@@ -128,6 +130,45 @@ _HIGH_RISK_KEYWORDS, _MEDIUM_RISK_KEYWORDS, _APPROVAL_TRIGGERS = _load_risk_conf
 
 # Sources that always require approval (any external communication)
 _EXTERNAL_SOURCES = {"gmail", "whatsapp", "linkedin"}
+
+# ---------------------------------------------------------------------------
+# Prompt injection sanitizer
+# Detects common adversarial patterns in externally-supplied text (email
+# bodies, filenames) that attempt to manipulate the planning engine.
+# ---------------------------------------------------------------------------
+
+_INJECTION_RE = re.compile(
+    r"ignore\s+(previous|prior|all)\s+(instructions?|prompts?|commands?|context)"
+    r"|you\s+are\s+now\s+(?:a\s+)?(?:an?\s+)?\w+"
+    r"|(?:new\s+)?system\s*(?:prompt)?:\s*you\s"
+    r"|\[INST\]|\[\/INST\]"
+    r"|<\|im_start\|>|<\|im_end\|>|<\|system\|>"
+    r"|\\n\s*Human\s*:|\\n\s*Assistant\s*:"
+    r"|forget\s+(?:everything|all)\s+(?:above|previous|prior)"
+    r"|do\s+not\s+follow\s+(?:your|previous)\s+instructions?"
+    r"|disregard\s+(?:previous|prior|all)\s+instructions?"
+    r"|your\s+new\s+(?:instructions?|task|role)\s+(?:is|are)",
+    re.IGNORECASE,
+)
+
+_INJECTION_LOG = logging.getLogger("SecurityFilter")
+
+
+def _sanitize_text(text: str, source_label: str = "unknown") -> tuple[str, bool]:
+    """Detect and neutralise prompt injection patterns.
+
+    Returns (sanitized_text, was_modified). Logs a WARNING if injection detected.
+    The offending phrases are replaced with [CONTENT FILTERED] so the planning
+    engine can still classify risk and generate a plan, but cannot be hijacked.
+    """
+    if _INJECTION_RE.search(text):
+        _INJECTION_LOG.warning(
+            "Prompt injection attempt detected in '%s' — sanitizing content",
+            source_label,
+        )
+        sanitized = _INJECTION_RE.sub("[CONTENT FILTERED]", text)
+        return sanitized, True
+    return text, False
 
 
 def _word_set(text: str) -> set[str]:
@@ -512,6 +553,7 @@ class StateStore:
         self._path = vault_path / "Logs" / "planning_state.json"
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._data: dict = self._load()
+        self._lock = threading.Lock()  # guards all in-memory + disk writes
 
     def _load(self) -> dict:
         if self._path.exists():
@@ -530,7 +572,28 @@ class StateStore:
         os.replace(tmp, self._path)
 
     def is_processed(self, filename: str) -> bool:
-        return filename in self._data["processed"]
+        with self._lock:
+            return filename in self._data["processed"]
+
+    def claim_if_unprocessed(self, filename: str, timestamp: str) -> bool:
+        """Atomically claim a file for processing.
+
+        Returns True if this caller successfully claimed the file (i.e. it
+        was not already processed or claimed by another thread). Persists
+        a 'claimed' sentinel immediately so concurrent threads skip it.
+        """
+        with self._lock:
+            if filename in self._data["processed"]:
+                return False
+            # Reserve the slot with a sentinel before releasing the lock
+            self._data["processed"][filename] = {
+                "timestamp": timestamp,
+                "status":    "claimed",
+                "plan":      None,
+                "approval":  None,
+            }
+            self._save()
+            return True
 
     def mark_processed(
         self,
@@ -540,12 +603,19 @@ class StateStore:
         approval_path: str | None,
         timestamp: str,
     ) -> None:
-        self._data["processed"][filename] = {
-            "timestamp":     timestamp,
-            "plan":          plan_path,
-            "approval":      approval_path,
-        }
-        self._save()
+        with self._lock:
+            self._data["processed"][filename] = {
+                "timestamp": timestamp,
+                "plan":      plan_path,
+                "approval":  approval_path,
+            }
+            self._save()
+
+    def unmark(self, filename: str) -> None:
+        """Remove a claimed-but-failed entry so the next cycle can retry."""
+        with self._lock:
+            self._data["processed"].pop(filename, None)
+            self._save()
 
 
 # ---------------------------------------------------------------------------
@@ -631,6 +701,7 @@ class PlanningEngine:
         self.state   = StateStore(self.vault)
         self.audit   = AuditLog(self.vault)
         self._recent: list[str] = []
+        self._recent_lock = threading.Lock()  # thread-safe append
 
         # Ensure all required vault directories exist
         for folder in (
@@ -679,50 +750,64 @@ class PlanningEngine:
 
     def _process_file(self, md_file: Path) -> None:
         filename = md_file.name
+        ts = _now_iso()
 
-        if self.state.is_processed(filename):
-            self.log.debug(f"Already processed: {filename}")
+        # Atomic claim: returns False if already processed or claimed by another thread
+        if not self.state.claim_if_unprocessed(filename, ts):
+            self.log.debug(f"Already processed/claimed: {filename}")
             return
 
-        # Acquire exclusive non-blocking lock — skip if another process holds it
+        # Also acquire an exclusive flock for cross-PROCESS safety
+        # (multiple separate processes can both call _process_file on the same file)
         try:
             lock_fd = md_file.open("r", encoding="utf-8")
             fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             self.log.debug(f"Skipping {filename} — locked by another process")
+            self.state.unmark(filename)  # release the claim so next cycle can retry
             return
         except OSError as exc:
             self.log.warning(f"Cannot lock {filename}: {exc}")
+            self.state.unmark(filename)
             return
 
         try:
-            # Re-check after acquiring lock: another process may have just finished
-            if not md_file.exists() or self.state.is_processed(filename):
+            if not md_file.exists():
+                self.state.unmark(filename)
                 return
 
             self.log.info(f"Processing: {filename}")
-            ts = _now_iso()
-            text = lock_fd.read()
-        except OSError as exc:
-            self.log.error(f"Cannot read {filename}: {exc}")
-            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
-            lock_fd.close()
-            return
+            try:
+                text = lock_fd.read()
+            except OSError as exc:
+                self.log.error(f"Cannot read {filename}: {exc}")
+                self.state.unmark(filename)
+                return
 
-        try:
-            fm, body     = parse_md(text)
-            full_text    = " ".join(str(v) for v in fm.values()) + " " + body
+            fm, body  = parse_md(text)
 
-            source       = str(fm.get("source", "file_drop")).lower()
-            trace_id     = str(fm.get("trace_id", ""))
-            risk         = classify_risk(full_text)
-            approval     = needs_approval(full_text, source, risk)
-            priority     = self._priority(fm, risk)
-            sender_raw   = _sender(fm)
+            # ── Prompt injection sanitization ──────────────────────────────
+            body, was_injected = _sanitize_text(body, source_label=filename)
+            if was_injected:
+                self.audit.write(
+                    "security_injection_detected",
+                    filename=filename,
+                    result="sanitized",
+                    level="WARNING",
+                )
+
+            full_text = " ".join(str(v) for v in fm.values()) + " " + body
+
+            source     = str(fm.get("source", "file_drop")).lower()
+            trace_id   = str(fm.get("trace_id", ""))
+            risk       = classify_risk(full_text)
+            approval   = needs_approval(full_text, source, risk)
+            priority   = self._priority(fm, risk)
+            sender_raw = _sender(fm)
 
             # ── Plan path ─────────────────────────────────────────────────
-            plan_name    = self._plan_filename(source, sender_raw, md_file.stem)
-            plan_path    = self.vault / "Plans" / plan_name
+            plan_name = self._plan_filename(source, sender_raw, md_file.stem)
+            plan_path = self.vault / "Plans" / plan_name
 
             # ── Approval path ──────────────────────────────────────────────
             approval_path: Path | None = None
@@ -731,7 +816,7 @@ class PlanningEngine:
                 appr_name     = self._approval_filename(action, sender_raw, md_file.stem)
                 approval_path = self.vault / "Pending_Approval" / appr_name
 
-            # ── Write Plan, Approval, move original (with rollback on failure) ──
+            # ── Write Plan, Approval, move original (rollback on failure) ──
             plan_written     = False
             approval_written = False
             try:
@@ -753,17 +838,17 @@ class PlanningEngine:
                 self.log.info(f"  Plan      → Plans/{plan_name}")
 
                 if approval_path:
-                    draft        = generate_draft(source, fm, body)
-                    action_str   = action_for(source, fm)
+                    draft      = generate_draft(source, fm, body)
+                    action_str = action_for(source, fm)
                     appr_content = build_approval(
-                        action      = action_str,
-                        plan_path   = plan_path,
-                        vault_path  = self.vault,
-                        source      = source,
-                        fm          = fm,
-                        body        = body,
-                        draft       = draft,
-                        trace_id    = trace_id,
+                        action     = action_str,
+                        plan_path  = plan_path,
+                        vault_path = self.vault,
+                        source     = source,
+                        fm         = fm,
+                        body       = body,
+                        draft      = draft,
+                        trace_id   = trace_id,
                     )
                     approval_path.write_text(appr_content, encoding="utf-8")
                     approval_written = True
@@ -777,14 +862,15 @@ class PlanningEngine:
                 self.log.info(f"  Archived  → Done/{done_dest.name}")
 
             except Exception:
-                # Clean up any partially written files so the next cycle can retry
+                # Clean up partial writes so the next cycle can retry
                 if plan_written and plan_path.exists():
                     plan_path.unlink(missing_ok=True)
                 if approval_written and approval_path and approval_path.exists():
                     approval_path.unlink(missing_ok=True)
+                self.state.unmark(filename)
                 raise
 
-            # ── Persist state (only after all writes succeed) ──────────────
+            # ── Persist final state (only after all writes succeed) ────────
             self.state.mark_processed(
                 filename,
                 plan_path     = str(plan_path.relative_to(self.vault)),
@@ -798,23 +884,24 @@ class PlanningEngine:
             # ── Audit log ──────────────────────────────────────────────────
             self.audit.write(
                 "item_processed",
-                source    = source,
-                filename  = filename,
-                plan      = plan_name,
-                approval  = approval_path.name if approval_path else None,
-                priority  = priority,
-                risk      = risk,
-                result    = "success",
+                source   = source,
+                filename = filename,
+                plan     = plan_name,
+                approval = approval_path.name if approval_path else None,
+                priority = priority,
+                risk     = risk,
+                result   = "success",
                 **( {"trace_id": trace_id} if trace_id else {} ),
             )
 
-            # ── Dashboard activity line ────────────────────────────────────
-            ts_short = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            # ── Dashboard activity line (thread-safe append) ───────────────
+            ts_short  = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             appr_note = f" + `{approval_path.name}`" if approval_path else ""
-            self._recent.append(
-                f"`{ts_short}` [{source.upper()}] {sender_raw[:35]} "
-                f"→ `{plan_name}`{appr_note}"
-            )
+            with self._recent_lock:
+                self._recent.append(
+                    f"`{ts_short}` [{source.upper()}] {sender_raw[:35]} "
+                    f"→ `{plan_name}`{appr_note}"
+                )
 
         finally:
             fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
@@ -824,8 +911,13 @@ class PlanningEngine:
     # Public API
     # ------------------------------------------------------------------
 
-    def run_once(self) -> int:
-        """Process all pending items in Needs_Action. Returns count processed."""
+    def run_once(self, max_workers: int = 4) -> int:
+        """Process all pending items in Needs_Action concurrently.
+
+        Uses a ThreadPoolExecutor so multiple items are processed in parallel.
+        File-level locking (fcntl + StateStore.claim_if_unprocessed) ensures
+        each item is handled by exactly one thread even across restarts.
+        """
         pending = sorted(
             (
                 p for p in (self.vault / "Needs_Action").glob("*.md")
@@ -839,25 +931,37 @@ class PlanningEngine:
             update_dashboard(self.vault, self._recent)
             return 0
 
-        self.log.info(f"Found {len(pending)} item(s) in Needs_Action.")
+        self.log.info(
+            f"Found {len(pending)} item(s) in Needs_Action "
+            f"(workers={min(max_workers, len(pending))})."
+        )
         processed = 0
+        n_workers = min(max_workers, len(pending))
 
-        for md_file in pending:
-            try:
-                self._process_file(md_file)
-                processed += 1
-            except Exception as exc:
-                self.log.error(
-                    f"Failed to process {md_file.name}: {exc}", exc_info=True
-                )
-                self.audit.write(
-                    "item_error",
-                    filename = md_file.name,
-                    error    = str(exc),
-                    result   = "error",
-                )
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = {
+                pool.submit(self._process_file, md_file): md_file
+                for md_file in pending
+            }
+            for future in as_completed(futures):
+                md_file = futures[future]
+                try:
+                    future.result()
+                    processed += 1
+                except Exception as exc:
+                    self.log.error(
+                        f"Failed to process {md_file.name}: {exc}", exc_info=True
+                    )
+                    self.audit.write(
+                        "item_error",
+                        filename = md_file.name,
+                        error    = str(exc),
+                        result   = "error",
+                    )
 
-        update_dashboard(self.vault, self._recent)
+        with self._recent_lock:
+            recent_snapshot = list(self._recent)
+        update_dashboard(self.vault, recent_snapshot)
         self.log.info(f"Cycle complete — {processed}/{len(pending)} item(s) processed.")
         return processed
 

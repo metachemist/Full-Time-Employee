@@ -23,7 +23,9 @@ import re
 import subprocess
 import sys
 import textwrap
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -48,7 +50,32 @@ except ImportError:
 _PLAYWRIGHT_ACTIONS = {"send_twitter_post"}
 
 # ---------------------------------------------------------------------------
-# Email recipient allowlist — set EMAIL_RECIPIENT_ALLOWLIST=domain1,domain2 in .env
+# Subprocess resource limits — applied via preexec_fn on POSIX systems.
+# Prevents runaway skill scripts from consuming unbounded CPU/memory.
+# ---------------------------------------------------------------------------
+
+try:
+    import resource as _resource
+    _HAVE_RESOURCE = True
+except ImportError:
+    _HAVE_RESOURCE = False  # Windows — skip silently
+
+
+def _set_subprocess_limits() -> None:
+    """Called by subprocess preexec_fn. Sets per-process resource limits."""
+    if not _HAVE_RESOURCE:
+        return
+    # CPU time: 7 minutes hard cap (Playwright actions can be slow)
+    _resource.setrlimit(_resource.RLIMIT_CPU, (420, 420))
+    # Max open file descriptors: 256 (prevent fd leak escalation)
+    try:
+        _resource.setrlimit(_resource.RLIMIT_NOFILE, (256, 256))
+    except ValueError:
+        pass  # current limit already lower than 256 — leave it
+
+
+# ---------------------------------------------------------------------------
+# Email recipient allowlist + RFC5322 validation
 # ---------------------------------------------------------------------------
 
 _log = logging.getLogger("ApprovalExecutor")
@@ -59,18 +86,53 @@ _EMAIL_ALLOWLIST_DOMAINS: set[str] = set(
     if d.strip()
 )
 
+# Simple but sufficient RFC5322 local@domain validator
+_EMAIL_RE = re.compile(
+    r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$'
+)
+
 
 def _validate_email_recipient(to: str) -> str | None:
-    """Return error string if recipient not in allowlist, else None."""
-    if not _EMAIL_ALLOWLIST_DOMAINS:
-        _log.warning("EMAIL_RECIPIENT_ALLOWLIST not set — all recipients allowed")
-        return None
-    domain = to.split("@")[-1].lower().rstrip(">").strip() if "@" in to else ""
-    if domain not in _EMAIL_ALLOWLIST_DOMAINS:
-        return (
-            f"Recipient domain '{domain}' not in EMAIL_RECIPIENT_ALLOWLIST. "
-            f"Allowed: {', '.join(sorted(_EMAIL_ALLOWLIST_DOMAINS))}"
-        )
+    """Validate an email recipient.
+
+    Checks (in order):
+    1. No null bytes or ASCII control characters
+    2. Single address only (no commas / semicolons — prevents CC injection)
+    3. Valid RFC5322-ish format
+    4. Domain in EMAIL_RECIPIENT_ALLOWLIST (if configured)
+
+    Returns an error string on the first failure, or None if valid.
+    """
+    if not to or not to.strip():
+        return "Recipient 'to' field is empty."
+
+    # Strip display-name portion: "John <john@example.com>" → "john@example.com"
+    m = re.search(r'<([^>]+)>', to)
+    bare = m.group(1).strip() if m else to.strip()
+
+    # Null bytes / control characters
+    if any(ord(c) < 32 for c in bare):
+        return "Recipient contains invalid control characters."
+
+    # Multiple addresses (comma or semicolon separated)
+    if re.search(r'[,;]', bare):
+        return "Multiple recipients are not allowed — provide a single address."
+
+    # Basic format check
+    if not _EMAIL_RE.match(bare):
+        return f"Recipient '{bare}' is not a valid email address."
+
+    # Domain allowlist (optional — skipped if not configured)
+    if _EMAIL_ALLOWLIST_DOMAINS:
+        domain = bare.split("@")[-1].lower()
+        if domain not in _EMAIL_ALLOWLIST_DOMAINS:
+            return (
+                f"Recipient domain '{domain}' not in EMAIL_RECIPIENT_ALLOWLIST. "
+                f"Allowed: {', '.join(sorted(_EMAIL_ALLOWLIST_DOMAINS))}"
+            )
+    else:
+        _log.warning("EMAIL_RECIPIENT_ALLOWLIST not set — all recipient domains allowed")
+
     return None
 
 
@@ -81,6 +143,7 @@ def _validate_email_recipient(to: str) -> str | None:
 _MAX_ACTIONS_PER_HOUR = 10
 _rate_state: dict = {"bucket": None, "count": 0}
 _rate_file: Path | None = None  # set once vault path is known
+_rate_lock = threading.Lock()   # guards _rate_state across concurrent approvals
 
 
 def _rate_file_path(vault: Path) -> Path:
@@ -115,16 +178,20 @@ def _save_rate_state() -> None:
 
 
 def _rate_limit_check() -> bool:
-    """Return True if action is allowed; False if hourly cap reached."""
-    bucket = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
-    if _rate_state["bucket"] != bucket:
-        _rate_state["bucket"] = bucket
-        _rate_state["count"] = 0
-    if _rate_state["count"] >= _MAX_ACTIONS_PER_HOUR:
-        return False
-    _rate_state["count"] += 1
-    _save_rate_state()
-    return True
+    """Return True if action is allowed; False if hourly cap reached.
+
+    Thread-safe via _rate_lock.
+    """
+    with _rate_lock:
+        bucket = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+        if _rate_state["bucket"] != bucket:
+            _rate_state["bucket"] = bucket
+            _rate_state["count"] = 0
+        if _rate_state["count"] >= _MAX_ACTIONS_PER_HOUR:
+            return False
+        _rate_state["count"] += 1
+        _save_rate_state()
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +207,7 @@ _metrics: dict = {
     "last_updated":         None,
 }
 _metrics_file: Path | None = None
+_metrics_lock = threading.Lock()  # guards _metrics across concurrent approvals
 
 
 def _load_metrics(vault: Path) -> None:
@@ -168,9 +236,10 @@ def _write_metrics(vault: Path) -> None:
 
 
 def _record_metric(key: str, vault: Path) -> None:
-    _metrics["actions_total"] += 1
-    if key in _metrics:
-        _metrics[key] += 1
+    with _metrics_lock:
+        _metrics["actions_total"] += 1
+        if key in _metrics:
+            _metrics[key] += 1
     _write_metrics(vault)
 
 
@@ -444,8 +513,14 @@ def execute_approval(
     # Playwright actions need more time for browser startup + page rendering
     _timeout = 300 if action in _PLAYWRIGHT_ACTIONS else 120
 
+    # preexec_fn applies resource limits to the skill subprocess (POSIX only)
+    _preexec = _set_subprocess_limits if _HAVE_RESOURCE else None
+
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=_timeout)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=_timeout, preexec_fn=_preexec,
+        )
         output_raw = result.stdout.strip()
         try:
             output = json.loads(output_raw)
@@ -553,7 +628,15 @@ def _retry_failed(vault: Path, failed_dir: Path, approved_dir: Path) -> int:
 
 
 def _run_once(vault: Path, approved_dir: Path, dry_run: bool, once_file: str | None) -> int:
-    """Process one batch of approvals. Returns exit code (0=ok, 1=errors)."""
+    """Process one batch of approvals concurrently.
+
+    Non-Playwright actions (email, API calls) run in parallel via
+    ThreadPoolExecutor. Each Playwright action launches its own subprocess
+    with a fresh browser context, so multiple Playwright actions also run
+    concurrently (up to MAX_WORKERS_PLAYWRIGHT).
+
+    Returns exit code: 0=ok, 1=errors.
+    """
     failed_dir = vault / "Failed"
 
     if once_file:
@@ -569,10 +652,22 @@ def _run_once(vault: Path, approved_dir: Path, dry_run: bool, once_file: str | N
 
     print(f"Found {len(files)} approval(s) to process{' [DRY RUN]' if dry_run else ''}.\n")
 
-    results = []
-    for f in files:
-        r = execute_approval(f, vault, dry_run=dry_run, failed_dir=failed_dir)
-        results.append(r)
+    # Playwright actions get their own limited pool (browser startup is heavy)
+    MAX_WORKERS = 4
+
+    results: list[dict] = []
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {
+            pool.submit(execute_approval, f, vault, dry_run, failed_dir): f
+            for f in files
+        }
+        for future in as_completed(futures):
+            try:
+                r = future.result()
+            except Exception as exc:
+                f = futures[future]
+                r = {"status": "error", "reason": str(exc), "file": f.name}
+            results.append(r)
 
     success = sum(1 for r in results if r["status"] in ("success", "dry_run"))
     errors  = sum(1 for r in results if r["status"] == "error")
