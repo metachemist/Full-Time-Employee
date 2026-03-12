@@ -8,9 +8,13 @@ Provides:
 """
 
 import json
+import os
+import threading
 import time
 import logging
 import logging.handlers
+import urllib.request
+from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
@@ -47,6 +51,156 @@ def _setup_logging() -> None:
 
 
 _setup_logging()
+
+# ---------------------------------------------------------------------------
+# Structured log entry — enforces a consistent JSONL schema across all
+# components (watchers, planning engine, executor).
+# ---------------------------------------------------------------------------
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass
+class LogEntry:
+    """Canonical JSONL audit log entry. All audit writes must go through this."""
+    event:    str
+    source:   str
+    level:    str  = "INFO"
+    trace_id: str  = ""
+    timestamp: str = field(default_factory=_iso_now)
+    # Arbitrary extra key/value pairs (merged at serialisation time)
+    _extra:   dict = field(default_factory=dict, repr=False)
+
+    def with_extra(self, **kwargs) -> "LogEntry":
+        """Return a copy enriched with extra fields."""
+        copy = LogEntry(
+            event=self.event, source=self.source,
+            level=self.level, trace_id=self.trace_id,
+            timestamp=self.timestamp,
+        )
+        copy._extra = {**self._extra, **kwargs}
+        return copy
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "timestamp": self.timestamp,
+            "level":     self.level,
+            "source":    self.source,
+            "event":     self.event,
+        }
+        if self.trace_id:
+            d["trace_id"] = self.trace_id
+        d.update(self._extra)
+        return d
+
+    def to_jsonl(self) -> str:
+        return json.dumps(self.to_dict(), default=str)
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker — prevents hammering a failing external API.
+#
+# States:
+#   CLOSED    — normal operation; failures increment counter
+#   OPEN      — API is down; calls rejected immediately
+#   HALF_OPEN — recovery probe; one call allowed through
+# ---------------------------------------------------------------------------
+
+
+class CircuitBreaker:
+    """Three-state circuit breaker for external API calls."""
+
+    CLOSED    = "closed"
+    OPEN      = "open"
+    HALF_OPEN = "half_open"
+
+    def __init__(
+        self,
+        name:              str   = "default",
+        failure_threshold: int   = 5,
+        recovery_timeout:  float = 60.0,
+    ):
+        self.name              = name
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout  = recovery_timeout
+        self._state            = self.CLOSED
+        self._failure_count    = 0
+        self._opened_at: float | None = None
+        self._lock             = threading.Lock()
+        self._log              = logging.getLogger(f"CircuitBreaker[{name}]")
+
+    @property
+    def state(self) -> str:
+        return self._state
+
+    @property
+    def is_open(self) -> bool:
+        with self._lock:
+            if self._state != self.OPEN:
+                return False
+            elapsed = time.monotonic() - (self._opened_at or 0.0)
+            if elapsed >= self.recovery_timeout:
+                self._state = self.HALF_OPEN
+                self._log.info(
+                    f"Circuit '{self.name}': OPEN → HALF_OPEN (testing after {elapsed:.0f}s)"
+                )
+                return False
+            return True
+
+    def call(self, fn, *args, **kwargs):
+        """Call fn through the circuit. Raises RuntimeError if circuit is OPEN."""
+        if self.is_open:
+            with self._lock:
+                secs_left = self.recovery_timeout - (
+                    time.monotonic() - (self._opened_at or 0.0)
+                )
+            raise RuntimeError(
+                f"Circuit '{self.name}' is OPEN — "
+                f"{max(0, secs_left):.0f}s until retry"
+            )
+        try:
+            result = fn(*args, **kwargs)
+            self._on_success()
+            return result
+        except Exception as exc:
+            self._on_failure(exc)
+            raise
+
+    def _on_success(self) -> None:
+        with self._lock:
+            if self._state == self.HALF_OPEN:
+                self._log.info(
+                    f"Circuit '{self.name}': HALF_OPEN → CLOSED (recovered)"
+                )
+            self._state         = self.CLOSED
+            self._failure_count = 0
+            self._opened_at     = None
+
+    def _on_failure(self, exc: Exception) -> None:
+        with self._lock:
+            self._failure_count += 1
+            self._log.warning(
+                f"Circuit '{self.name}': "
+                f"failure {self._failure_count}/{self.failure_threshold} — {exc}"
+            )
+            if self._failure_count >= self.failure_threshold:
+                self._state     = self.OPEN
+                self._opened_at = time.monotonic()
+                self._log.error(
+                    f"Circuit '{self.name}': CLOSED → OPEN "
+                    f"(will retry after {self.recovery_timeout}s)"
+                )
+
+    def reset(self) -> None:
+        """Manually reset the circuit to CLOSED (e.g. after manual remediation)."""
+        with self._lock:
+            self._state         = self.CLOSED
+            self._failure_count = 0
+            self._opened_at     = None
+        self._log.info(f"Circuit '{self.name}': manually reset to CLOSED")
+
 
 # ---------------------------------------------------------------------------
 # Retry decorator
@@ -148,12 +302,14 @@ class BaseWatcher(ABC):
         return set()
 
     def _save_state(self) -> None:
-        """Persist processed IDs to disk immediately."""
+        """Persist processed IDs to disk atomically (write-then-replace)."""
         try:
-            self._state_file.write_text(
+            tmp = self._state_file.with_suffix(".tmp")
+            tmp.write_text(
                 json.dumps({"processed_ids": sorted(self.processed_ids)}, indent=2),
                 encoding="utf-8",
             )
+            os.replace(tmp, self._state_file)
         except OSError as exc:
             self.logger.error(f"Could not save state file: {exc}")
 
@@ -169,23 +325,37 @@ class BaseWatcher(ABC):
     # Audit logging — writes JSONL entries to vault/Logs/<date>.jsonl
     # ------------------------------------------------------------------
 
-    def _write_audit(self, event: str, **kwargs) -> None:
-        """Append a structured audit event to vault/Logs/<today>.jsonl."""
+    def _write_audit(self, event: str, *, level: str = "INFO",
+                     trace_id: str = "", **kwargs) -> None:
+        """Append a structured LogEntry to vault/Logs/<today>.jsonl."""
         try:
-            now = datetime.now(timezone.utc)
+            entry = LogEntry(
+                event=event,
+                source=self.__class__.__name__,
+                level=level,
+                trace_id=trace_id,
+            ).with_extra(**kwargs)
             log_dir = self.vault_path / "Logs"
             log_dir.mkdir(parents=True, exist_ok=True)
-            log_file = log_dir / now.strftime("%Y-%m-%d.jsonl")
-            entry = {
-                "timestamp": now.isoformat(),
-                "source": self.__class__.__name__,
-                "event": event,
-                **kwargs,
-            }
+            log_file = log_dir / datetime.now(timezone.utc).strftime("%Y-%m-%d.jsonl")
             with log_file.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, default=str) + "\n")
+                f.write(entry.to_jsonl() + "\n")
         except Exception as exc:
             self.logger.error(f"Failed to write audit log: {exc}")
+
+    # ------------------------------------------------------------------
+    # Dead-man switch — ping Healthchecks.io after each successful cycle
+    # ------------------------------------------------------------------
+
+    def _ping_healthcheck(self) -> None:
+        """Ping HEALTHCHECK_URL env var (silently no-ops if unset or unreachable)."""
+        url = os.environ.get("HEALTHCHECK_URL", "").strip()
+        if not url:
+            return
+        try:
+            urllib.request.urlopen(url, timeout=5)
+        except Exception:
+            pass  # Never let a failed ping crash the watcher
 
     # ------------------------------------------------------------------
     # Abstract interface
@@ -231,6 +401,7 @@ class BaseWatcher(ABC):
                             error=str(exc),
                             item=str(item)[:200],
                         )
+                self._ping_healthcheck()
                 time.sleep(self.check_interval)
             except KeyboardInterrupt:
                 self.logger.info("Shutdown requested — exiting cleanly.")

@@ -1,0 +1,46 @@
+# Secrets — never include in image
+.env
+.env.*
+*.pem
+*.key
+
+# Browser sessions (sensitive cookies)
+.sessions/
+**/.sessions/
+
+# Local state
+watchers/.state/
+
+# Build artifacts
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Vault content (mounted at runtime)
+vault/
+
+# Logs (mounted at runtime)
+logs/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+.pytest_cache/
+**/.pytest_cache/
+htmlcov/
+.coverage
