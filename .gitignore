@@ -33,3 +33,19 @@ package-lock.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Vault runtime data — contains PII (emails, names, audit logs)
+vault/Logs/*.jsonl
+vault/Logs/planning_state.json
+vault/Logs/rate_limit.json
+vault/Logs/metrics.json
+vault/Done/
+vault/Approved/
+vault/Rejected/
+vault/Failed/
+vault/Inbox/
+vault/Redacted/
+vault/Archive/
+
+# Local Claude settings
+.claude/settings.local.json

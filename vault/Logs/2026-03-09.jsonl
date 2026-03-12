@@ -1,8 +1,0 @@
-{"timestamp": "2026-03-09T02:44:47.780955+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
-{"timestamp": "2026-03-09T07:51:02.690156+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
-{"timestamp": "2026-03-09T09:44:29.500121+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
-{"timestamp": "2026-03-09T16:03:46.992128+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
-{"timestamp": "2026-03-09T16:08:18.041033+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
-{"timestamp": "2026-03-09T16:08:32.535922+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
-{"timestamp": "2026-03-09T16:38:02.647369+00:00", "source": "GmailWatcher", "event": "watcher_started", "interval": 30}
-{"timestamp": "2026-03-09T19:50:48.007162+00:00", "source": "GmailWatcher", "event": "watcher_stopped", "reason": "KeyboardInterrupt"}
