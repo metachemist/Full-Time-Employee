@@ -1,6 +1,6 @@
 # Personal AI Employee — Gold Tier
 
-An autonomous agent that monitors Gmail, posts to social media, manages Odoo CRM, and executes approved actions. Built on Claude Code with Obsidian as the dashboard.
+An autonomous AI employee built on Claude Code that monitors Gmail, file drops, and social media via Python watchers, the reasons over an Obsidian vault to generate plans and execute actions across email, LinkedIn, Twitter, Facebook, Instagram, and Odoo CRM. A human-in-the-loop approval workflow ensures sensitive actions require explicit sign-off, with full audit logging and CEO briefing capabilities for oversight.
 
 **Stack:** Claude Code · Obsidian · Gmail API · LinkedIn API · Facebook/Instagram Graph API · Twitter X API v2 · Odoo 19 JSON-RPC · Playwright · PM2
 
